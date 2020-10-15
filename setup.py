@@ -7,7 +7,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 
 
 setuptools.setup(name='cuneiformparser',
-                version='0.1',
+                version='0.2.0',
                 description='Parse cuneiform transliterations',
                 long_description=long_description,
                 long_description_content_type='text/markdown',
@@ -18,10 +18,9 @@ setuptools.setup(name='cuneiformparser',
                 packages=setuptools.find_packages(),
                 classifiers=[
                     'Development Status :: 4 - Beta',
-                    'Programming Language :: Python :: 2',
                     'Programming Language :: Python :: 3',
                     'License :: OSI Approved :: MIT License',
                     'Operating System :: OS Independent',
                     'Intended Audience :: Science/Research',
                 ],
-                install_requires=['regex'],)
+                install_requires=['antlr4-python3-runtime', 'pandas'],)

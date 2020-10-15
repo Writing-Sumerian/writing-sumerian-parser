@@ -38,3 +38,12 @@ yarn-error.log*
 *.exe
 *.o
 *.so
+
+.antlr
+Cuneiform.tokens
+CuneiformLexer.py
+CuneiformLexer.tokens
+CuneiformParser.py
+CuneiformListener.py
+
+input.txt
