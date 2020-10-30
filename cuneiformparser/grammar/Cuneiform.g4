@@ -20,7 +20,8 @@ NUMBER : '0' | PNUMBER ( '/' PNUMBER | FRAC )? | FRAC;
 VOWELSIGN : UVOWEL PNUMBER?;
 SIGN : USYLL ( ']'? '['? USYLL )* PNUMBER?;
 NNSIGN: ( 'LAK' | 'KWU' | 'REC' | 'RSP' | 'ZATU' ) PNUMBER [a-c]?;
-VALUE : LSYLL ( ']'? '['? LSYLL )* (PNUMBER | X)? ('⁺'+ | '⁻'+)?;
+VALUE : LSYLL ( ']'? '['? LSYLL )* (PNUMBER | X)? ('⁺'+ | '⁻'+)?
+      | '’';
 CVALUE : CSYLL ( ']'? '['? LSYLL )* (PNUMBER | X)? ('⁺'+ | '⁻'+)?;
 D : 'd';
 MOD : '@' ( [tgšnkzcvabx] | '90' | '180' );
@@ -28,16 +29,22 @@ CRIT : [?!~*#];
 ABOVE : '&' | '%';
 OCONDITION : [[⸢‹«];
 CCONDITION : [\]⸣›»];
+SPACE : '   ';
+BAR : ' | ';
 OTHER : .;
 
-
-text : ' '* openCondition? ( section | divider ) (nl ( section | divider ) )* closeCondition? ' '*  EOF
+text : ' '* openCondition? (vdivider nl)* section (nl (vdivider nl )+ section)* (nl vdivider)* closeCondition? ' '*  EOF
      | EOF;
-section : ( meta space )? compound ( space ( compound | meta) )*;
-compound : word;
+section : hdivider? compound ( ( spaceSep | hdivider ) compound )* hdivider?;
+compound : ( meta space )* word ( doubleDash word )* ( closeCondition? space comment )?;
 //phrase : ( word | pn ( ( dash | colon ) pn )* ) ( space comment )?;
 //phrase : ( word | pn ) ( ( dash | colon ) ( word | pn ) )* ( space comment )?;
-word : part ( ( dash | colon ) part )*;
+word : ( prefix dash )? '⟨' stem '⟩' ( dash suffix )?
+     | stem;
+prefix : segment;
+stem : segment;
+suffix : segment;
+segment : part ( ( dash | colon ) part )*;
 //pn : (detp | pcp)* ( cvalue | signs ) (dets | pcs)* ( ( dash | colon ) part)*;
 part : ( detp | pcp )* ( value | cvalue | signs | numbers ) ( ( detc | pcc )+ ( value | cvalue | signs | numbers ) )* ( dets | pcs )*;
 signs : ( ( sign | maybeSign ) ( dot | colon ) )* sign ( ( dot | colon ) ( sign | maybeSign ) )*;
@@ -56,21 +63,23 @@ pcc : decoration pc decoration;
 decoration : closeCondition? ( colon | slash | nl )? openCondition?;
 
 det : '{' openCondition? ( d | sign | value ) ( dot ( d | sign | value ) )* closeCondition? '}';
-pc : '<' openCondition? value ( dash value )* closeCondition? '>';
+pc : '<' openCondition? ( value | sign ) ( dash ( value | sign ) )* closeCondition? '>';
 
 
 // Characters
 
-value : ( valueT | descT ) mod* ( crit| comment )*;
-cvalue : cvalueT mod* ( crit | comment )*;
-d : dT ( crit | comment )*;
-divider : dividerT ( crit | comment )*;
+appendage : ( conditionSuffix? ( crit | comment )+ )?;
+
+value : ( valueT | descT ) mod* appendage;
+cvalue : cvalueT mod* appendage;
+d : dT appendage;
+vdivider : vdividerT crit* ( ( conditionSuffix? space )? comment )?;
 
 sign : simpleSign
      | x
      | dots
      | signSum
-     | '|' signComplex '|' ( crit | comment )*;
+     | '|' signComplex '|' appendage;
 signComplex : ( ( signSum | maybeSign ) dotOp )* signSum ( dotOp ( signSum | maybeSign ) )*;
 signSum : ( ( signProd | maybeSign ) plus )* signProd ( plus ( signProd | maybeSign ) )*;
 signProd : simpleSign
@@ -78,11 +87,11 @@ signProd : simpleSign
          | ( ( signFactor | maybeSign ) ( times | above ) )+ signFactor ( ( times | above ) ( signFactor | maybeSign ) )*;
 signFactor : simpleSign
            | '(' signComplex ')';
-simpleSign : ( signT mod* | nnsignT  | descT ) ( crit | comment )*;
+simpleSign : ( signT mod* | nnsignT  | descT ) appendage;
 maybeSign : x 
-          | numberT ( crit | comment )*;
-x : xT ( crit | comment )*;
-dots : dotsT ( crit | comment )*;
+          | numberT appendage;
+x : xT appendage;
+dots : dotsT appendage;
 
 number : simpleNumber
        | numberComplex;
@@ -90,17 +99,19 @@ numberComplex : ( ( numberProd | numberX ) plus )* numberProd ( plus ( numberPro
 numberProd : ( ( numberFactor | numberX ) ( times | div ) )* numberFactor ( ( times | div ) ( numberFactor | numberX ) )*;
 numberFactor : simpleNumber 
              | '(' number ')';
-simpleNumber : ( plusCrit? numberT | numberT plusCrit? ) ( crit | comment )*;
-numberX: numberXT ( crit | comment )* | dots;
+simpleNumber : ( plusCrit? numberT | numberT plusCrit? ) appendage;
+numberX: numberXT appendage | dots;
 
 numberXC: numberX;
 
 // Separators
 
 dash : closeCondition? '-' ( slash | nlT )? openCondition?;
+doubleDash : closeCondition? '--' ( slash | nlT )? openCondition?;
 dot : closeCondition? '.' ( slash | nlT )? openCondition?;
 colon : closeCondition? ':' ( slash | nlT )? openCondition?;
-space : closeCondition? ' '+ ( slash ' '+ )? openCondition?;
+spaceSep : closeCondition? ( space ( slash space | colon space | nlT space? )? | space? nlT space? ) openCondition?;
+hdivider : closeCondition? ( spaceSep? hdividerT ( space? crit | comment )* spaceSep? ) openCondition?;
 nl : closeCondition? ' '* nlT ' '* openCondition?;
 numberSep : closeCondition? ('.'|','|';') ( slash | nlT )? openCondition?;
 
@@ -117,6 +128,7 @@ above : closeCondition? ABOVE openCondition?;
 
 openCondition : OCONDITION;
 closeCondition : CCONDITION;
+conditionSuffix : CCONDITION;
 
 
 // Terminals
@@ -131,7 +143,9 @@ xT: X;
 numberXT: X;
 dotsT: '…';
 descT: DESC;
-dividerT: '□' | '=' | '–' |;
+vdividerT: '=' | '–' |;
+hdividerT: SPACE | BAR;
+space : ' '+ ;
 
 mod : MOD;
 crit : CRIT;

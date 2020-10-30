@@ -15,23 +15,26 @@ class Listener(CuneiformListener):
     def __init__(self, errorListener):
         self.errorListener = errorListener
 
-        self.signs = pd.DataFrame({'line_no': pd.Series([], dtype='int32'),
-                                   'word_no': pd.Series([], dtype='int32'),  
-                                   'value': pd.Series([], dtype='string'), 
-                                   'condition': pd.Series([], dtype='string'), 
-                                   'sign_type': pd.Series([], dtype='string'),
-                                   'phonographic': pd.Series([], dtype='boolean'), 
-                                   'indicator': pd.Series([], dtype='boolean'), 
-                                   'alignment': pd.Series([], dtype='string'), 
-                                   'crits': pd.Series([], dtype='string'), 
-                                   'comment': pd.Series([], dtype='object'), 
-                                   'newline': pd.Series([], dtype='boolean'), 
-                                   'inverted': pd.Series([], dtype='boolean')})
-        self.words = pd.DataFrame({'compound_no': pd.Series([], dtype='int32'),
-                                   'PN': pd.Series([], dtype='boolean'), 
-                                   'language': pd.Series([], dtype='string')})
-        self.compounds = pd.DataFrame({'PN': pd.Series([], dtype='boolean'), 
-                                       'comment': pd.Series([], dtype='object')})
+        self.signs = []
+        self.words = []
+        self.compounds = []
+        #self.signs = pd.DataFrame({'line_no': pd.Series([], dtype='int32'),
+        #                           'word_no': pd.Series([], dtype='int32'),  
+        #                           'value': pd.Series([], dtype='string'), 
+        #                           'condition': pd.Series([], dtype='string'), 
+        #                           'sign_type': pd.Series([], dtype='string'),
+        #                           'phonographic': pd.Series([], dtype='boolean'), 
+        #                           'indicator': pd.Series([], dtype='boolean'), 
+        #                           'alignment': pd.Series([], dtype='string'), 
+        #                           'crits': pd.Series([], dtype='string'), 
+        #                           'comment': pd.Series([], dtype='object'), 
+        #                           'newline': pd.Series([], dtype='boolean'), 
+        #                           'inverted': pd.Series([], dtype='boolean')})
+        #self.words = pd.DataFrame({'compound_no': pd.Series([], dtype='int32'),
+        #                           'PN': pd.Series([], dtype='boolean'), 
+        #                           'language': pd.Series([], dtype='string')})
+        #self.compounds = pd.DataFrame({'PN': pd.Series([], dtype='boolean'), 
+        #                               'comment': pd.Series([], dtype='object')})
         self.line_no = 0
         self.col = 0
         self.sign_type = None
@@ -52,21 +55,34 @@ class Listener(CuneiformListener):
         self.default_language = 'sumerian'
         self.language = self.default_language
 
+        self.condition_suffix = None
+
     def commit(self):
         condition = self.processInternalConditions(self.line_no, self.col)
-
-        self.signs = self.signs.append(pd.DataFrame({'line_no': pd.Series([self.line_no], dtype='int32'),
-                                                     'word_no': pd.Series([len(self.words.index)], dtype='int32'),  
-                                                     'value': pd.Series([self.value], dtype='string'), 
-                                                     'condition': pd.Series([condition], dtype='string'), 
-                                                     'sign_type': pd.Series([self.sign_type], dtype='string'),
-                                                     'phonographic': pd.Series([self.phonographic], dtype='boolean'), 
-                                                     'indicator': pd.Series([self.indicator], dtype='boolean'), 
-                                                     'alignment': pd.Series([self.alignment], dtype='string'), 
-                                                     'crits': pd.Series([self.crits], dtype='string'), 
-                                                     'comment': pd.Series([self.comments], dtype='object'), 
-                                                     'newline': pd.Series([self.newline], dtype='boolean'), 
-                                                     'inverted': pd.Series([self.inverted], dtype='boolean')}))
+        self.signs.append([self.line_no, 
+                           len(self.words), 
+                           self.value, 
+                           condition, 
+                           self.sign_type, 
+                           self.phonographic, 
+                           self.indicator, 
+                           self.alignment, 
+                           self.crits, 
+                           self.comments, 
+                           self.newline, 
+                           self.inverted])
+        #self.signs = self.signs.append(pd.DataFrame({'line_no': pd.Series([self.line_no], dtype='int32'),
+        #                                             'word_no': pd.Series([len(self.words.index)], dtype='int32'),  
+        #                                             'value': pd.Series([self.value], dtype='string'), 
+        #                                             'condition': pd.Series([condition], dtype='string'), 
+        #                                             'sign_type': pd.Series([self.sign_type], dtype='string'),
+        #                                             'phonographic': pd.Series([self.phonographic], dtype='boolean'), 
+        #                                             'indicator': pd.Series([self.indicator], dtype='boolean'), 
+        #                                             'alignment': pd.Series([self.alignment], dtype='string'), 
+        #                                             'crits': pd.Series([self.crits], dtype='string'), 
+        #                                             'comment': pd.Series([self.comments], dtype='object'), 
+        #                                             'newline': pd.Series([self.newline], dtype='boolean'), 
+        #                                             'inverted': pd.Series([self.inverted], dtype='boolean')}))
         self.value = ''
         self.crits = ''
         self.comments = []
@@ -83,15 +99,17 @@ class Listener(CuneiformListener):
             self.language = 'akkadian'
 
     def exitCompound(self, ctx:CuneiformParser.CompoundContext):
-        self.compounds = self.compounds.append(pd.DataFrame({'PN': pd.Series([False if ctx.word() else True], dtype='boolean'), 
-                                                             'comment': pd.Series([self.comments], dtype='object')}))
+        self.compounds.append([False if ctx.word() else True, self.comments])
+        #self.compounds = self.compounds.append(pd.DataFrame({'PN': pd.Series([False if ctx.word() else True], dtype='boolean'), 
+        #                                                     'comment': pd.Series([self.comments], dtype='object')}))
         self.comments = []
         self.language = self.default_language
 
     def exitWord(self, ctx:CuneiformParser.WordContext):
-        self.words = self.words.append(pd.DataFrame({'compound_no': pd.Series([len(self.compounds.index)], dtype='int32'),
-                                                     'PN': pd.Series([False], dtype='boolean'), 
-                                                     'language': pd.Series(['sumerian'], dtype='string')}))
+        #self.words = self.words.append(pd.DataFrame({'compound_no': pd.Series([len(self.compounds.index)], dtype='int32'),
+        #                                             'PN': pd.Series([False], dtype='boolean'), 
+        #                                             'language': pd.Series(['sumerian'], dtype='string')}))
+        self.words.append([len(self.compounds), False, self.language])
 
     
     # Determinatives 
@@ -326,16 +344,24 @@ class Listener(CuneiformListener):
             self.condition = 'intact'
 
     def processInternalConditions(self, line, col):
-        if not re.search(r'[\[\]]', self.value):
-            return self.condition
-        for i, c in enumerate(self.value):
-            if c in '[]':
-                self.processCondition(c, line, col+i)
-        self.value = re.sub(r'[\[\]]', '', self.value)
-        return 'damaged'
+        condition = self.condition
+        suffix_col = col+len(self.value)
+        if re.search(r'[\[\]]', self.value):
+            for i, c in enumerate(self.value):
+                if c in '[]':
+                    self.processCondition(c, line, col+i)
+            self.value = re.sub(r'[\[\]]', '', self.value)
+            condition = 'damaged'
+        if self.condition_suffix:
+            self.processCondition(self.condition_suffix, line, suffix_col)
+            self.condition_suffix = None
+        return condition
 
     def exitOpenCondition(self, ctx:CuneiformParser.OpenConditionContext):
         self.processCondition(ctx.getText(), ctx.start.line, ctx.start.column)
 
     def exitCloseCondition(self, ctx:CuneiformParser.CloseConditionContext):
         self.processCondition(ctx.getText(), ctx.start.line, ctx.start.column)
+
+    def exitConditionSuffix(self, ctx:CuneiformParser.ConditionSuffixContext):
+        self.condition_suffix = ctx.getText()

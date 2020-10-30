@@ -19,10 +19,10 @@ except:
 class ErrorListener(antlr4.error.ErrorListener.ErrorListener):
 
     def __init__(self):
-        self.errors = pd.DataFrame(columns=['line', 'column', 'symbol', 'msg'])
+        self.errors = []
 
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
-        self.errors.loc[len(self.errors.index)] = [line-1, column, offendingSymbol.text.replace('\n', r'\n') if offendingSymbol else '', msg.replace('\n', r'\n')]
+        self.errors.append([line-1, column, offendingSymbol.text.replace('\n', r'\n') if offendingSymbol else '', msg.replace('\n', r'\n')])
 
 
 def parse(text):
@@ -42,4 +42,29 @@ def parse(text):
     walker = antlr4.ParseTreeWalker()
     walker.walk(listener, tree)
 
-    return listener.signs, listener.compounds, listener.words, errorListener.errors
+    signs =     pd.DataFrame(listener.signs, 
+                             columns=['line_no', 
+                                      'word_no', 
+                                      'value', 
+                                      'condition', 
+                                      'sign_type', 
+                                      'phonographic', 
+                                      'indicator', 
+                                      'alignment', 
+                                      'crits', 
+                                      'comment',
+                                      'newline',
+                                      'inverted'])
+    compounds = pd.DataFrame(listener.compounds,
+                             columns=['PN', 
+                                      'comment'])
+    words =     pd.DataFrame(listener.words,
+                             columns=['compound_no', 
+                                      'PN', 
+                                      'language'])
+    errors =    pd.DataFrame(errorListener.errors,
+                             columns=['line', 
+                                      'column', 
+                                      'symbol', 
+                                      'msg'])
+    return signs, compounds, words, errors
