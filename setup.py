@@ -23,4 +23,4 @@ setuptools.setup(name='cuneiformparser',
                     'Operating System :: OS Independent',
                     'Intended Audience :: Science/Research',
                 ],
-                install_requires=['antlr4-python3-runtime', 'pandas'],)
+                install_requires=['antlr4-python3-runtime', 'pandas', 'regex'],)
