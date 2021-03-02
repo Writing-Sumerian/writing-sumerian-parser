@@ -12,29 +12,16 @@ except:
 
 class Listener(CuneiformListener):
 
-    def __init__(self, errorListener):
+    def __init__(self, errorListener, defaultLanguage, stem):
         self.errorListener = errorListener
+
+        self.default_language = defaultLanguage
+        self.default_stem = True if stem else None
 
         self.signs = []
         self.words = []
         self.compounds = []
-        #self.signs = pd.DataFrame({'line_no': pd.Series([], dtype='int32'),
-        #                           'word_no': pd.Series([], dtype='int32'),  
-        #                           'value': pd.Series([], dtype='string'), 
-        #                           'condition': pd.Series([], dtype='string'), 
-        #                           'sign_type': pd.Series([], dtype='string'),
-        #                           'phonographic': pd.Series([], dtype='boolean'), 
-        #                           'indicator': pd.Series([], dtype='boolean'), 
-        #                           'alignment': pd.Series([], dtype='string'), 
-        #                           'crits': pd.Series([], dtype='string'), 
-        #                           'comment': pd.Series([], dtype='object'), 
-        #                           'newline': pd.Series([], dtype='boolean'), 
-        #                           'inverted': pd.Series([], dtype='boolean')})
-        #self.words = pd.DataFrame({'compound_no': pd.Series([], dtype='int32'),
-        #                           'PN': pd.Series([], dtype='boolean'), 
-        #                           'language': pd.Series([], dtype='string')})
-        #self.compounds = pd.DataFrame({'PN': pd.Series([], dtype='boolean'), 
-        #                               'comment': pd.Series([], dtype='object')})
+
         self.line_no = 0
         self.col = 0
         self.sign_type = None
@@ -47,71 +34,91 @@ class Listener(CuneiformListener):
 
         self.value = ''
         self.crits = ''
-        self.comments = []
 
-        self.complex = False
+        self.complex = 0
+
+        self.capitalized = False
 
         self.pn_type = None
-        self.default_language = 'sumerian'
         self.language = self.default_language
+        self.compoundComments = []
 
-        self.condition_suffix = None
+        self.stem = self.default_stem
 
     def commit(self):
         condition = self.processInternalConditions(self.line_no, self.col)
         self.signs.append([self.line_no, 
-                           len(self.words), 
+                           len(self.words),
                            self.value, 
                            condition, 
                            self.sign_type, 
                            self.phonographic, 
                            self.indicator, 
-                           self.alignment, 
-                           self.crits, 
-                           self.comments, 
+                           self.alignment,
+                           self.stem, 
+                           self.crits,
+                          [], 
                            self.newline, 
                            self.inverted])
-        #self.signs = self.signs.append(pd.DataFrame({'line_no': pd.Series([self.line_no], dtype='int32'),
-        #                                             'word_no': pd.Series([len(self.words.index)], dtype='int32'),  
-        #                                             'value': pd.Series([self.value], dtype='string'), 
-        #                                             'condition': pd.Series([condition], dtype='string'), 
-        #                                             'sign_type': pd.Series([self.sign_type], dtype='string'),
-        #                                             'phonographic': pd.Series([self.phonographic], dtype='boolean'), 
-        #                                             'indicator': pd.Series([self.indicator], dtype='boolean'), 
-        #                                             'alignment': pd.Series([self.alignment], dtype='string'), 
-        #                                             'crits': pd.Series([self.crits], dtype='string'), 
-        #                                             'comment': pd.Series([self.comments], dtype='object'), 
-        #                                             'newline': pd.Series([self.newline], dtype='boolean'), 
-        #                                             'inverted': pd.Series([self.inverted], dtype='boolean')}))
         self.value = ''
         self.crits = ''
-        self.comments = []
         self.newline = False
         self.inverted = False
-        self.phonographic = None
-        self.indicator = False
-        self.alignment = None
         self.col = -1
 
 
     def exitMeta(self, ctx:CuneiformParser.MetaContext):
-        if ctx.META == '_akk_':
+        if ctx.getText() == '_akk_':
             self.language = 'akkadian'
+        elif ctx.getText() == '_sum_':
+            self.language = 'sumerian'
+        elif ctx.getText() == '_hit_':
+            self.language = 'hittite'
+        elif ctx.getText() in ['_person_', '_place_', '_god_', '_water_', '_field_', '_temple_', '_month_', '_object_']:
+            self.pn_type = ctx.getText()[1:-1]
+            self.capitalized = True
 
     def exitCompound(self, ctx:CuneiformParser.CompoundContext):
-        self.compounds.append([False if ctx.word() else True, self.comments])
-        #self.compounds = self.compounds.append(pd.DataFrame({'PN': pd.Series([False if ctx.word() else True], dtype='boolean'), 
-        #                                                     'comment': pd.Series([self.comments], dtype='object')}))
-        self.comments = []
+        self.compounds.append([self.pn_type, self.language, '; '.join(self.compoundComments)])
+        self.compoundComments = []
+        self.pn_type = None
         self.language = self.default_language
 
     def exitWord(self, ctx:CuneiformParser.WordContext):
-        #self.words = self.words.append(pd.DataFrame({'compound_no': pd.Series([len(self.compounds.index)], dtype='int32'),
-        #                                             'PN': pd.Series([False], dtype='boolean'), 
-        #                                             'language': pd.Series(['sumerian'], dtype='string')}))
-        self.words.append([len(self.compounds), False, self.language])
+        self.words.append([len(self.compounds), self.capitalized])
+        self.capitalized = False
 
+    def enterCsegment(self, ctx:CuneiformParser.CsegmentContext):
+        self.capitalized = True
+
+
+    # Segments
+
+    def enterStem(self, ctx:CuneiformParser.StemContext):
+        self.stem = True
+
+    def enterCstem(self, ctx:CuneiformParser.CstemContext):
+        self.stem = True
+
+    def exitStem(self, ctx:CuneiformParser.StemContext):
+        self.stem = self.default_stem
+
+    def exitCstem(self, ctx:CuneiformParser.CstemContext):
+        self.stem = self.default_stem
+
+    def enterPrefix(self, ctx:CuneiformParser.PrefixContext):
+        self.stem = False
+
+    def enterCprefix(self, ctx:CuneiformParser.CprefixContext):
+        self.stem = False
+
+    def enterSuffix(self, ctx:CuneiformParser.SuffixContext):
+        self.stem = False
+
+    def exitSuffix(self, ctx:CuneiformParser.SuffixContext):
+        self.stem = self.default_stem
     
+
     # Determinatives 
 
     def enterDetp(self, ctx:CuneiformParser.DetpContext):
@@ -186,17 +193,26 @@ class Listener(CuneiformListener):
     def enterCvalue(self, ctx:CuneiformParser.CvalueContext):
         self.sign_type = 'value'
 
-    def enterD(self, ctx:CuneiformParser.DContext):
+    def enterDetValue(self, ctx:CuneiformParser.DetValueContext):
         self.sign_type = 'value'
 
     def enterSign(self, ctx:CuneiformParser.SignContext):
         self.sign_type = 'sign'
 
+    def enterMaybeSign(self, ctx:CuneiformParser.MaybeSignContext):
+        self.sign_type = 'sign'
+
     def enterNumber(self, ctx:CuneiformParser.NumberContext):
         self.sign_type = 'number'
 
-    def enterNumberXC(self, ctx:CuneiformParser.NumberContext):
+    def enterMaybeNumber(self, ctx:CuneiformParser.MaybeNumberContext):
         self.sign_type = 'number'
+
+    def enterHdivider(self, ctx:CuneiformParser.HdividerContext):
+        self.sign_type = 'punctuation'
+
+    def enterVdivider(self, ctx:CuneiformParser.VdividerContext):
+        self.sign_type = 'punctuation'
 
 
     def exitValue(self, ctx:CuneiformParser.ValueContext):
@@ -205,28 +221,74 @@ class Listener(CuneiformListener):
     def exitCvalue(self, ctx:CuneiformParser.CvalueContext):
         self.commit()
 
-    def exitD(self, ctx:CuneiformParser.DContext):
+    def exitDetValue(self, ctx:CuneiformParser.DetValueContext):
         self.commit()
 
-    def exitSign(self, ctx:CuneiformParser.SignContext):
-        self.commit()
+    def exitSimpleSign(self, ctx:CuneiformParser.SimpleSignContext):
+        if not self.complex:
+            self.commit()
 
-    def exitNumber(self, ctx:CuneiformParser.NumberContext):
-        self.commit()
+    def exitNumberSign(self, ctx:CuneiformParser.NumberSignContext):
+        if not self.complex:
+            self.commit()
+    
+    def exitX(self, ctx:CuneiformParser.XContext):
+        if not self.complex:
+            self.commit()
 
-    def exitNumberXC(self, ctx:CuneiformParser.NumberContext):
+    def exitDots(self, ctx:CuneiformParser.DotsContext):
+        if not self.complex:
+            self.sign_type = 'damage'
+            self.commit()
+
+    def exitSimpleNumber(self, ctx:CuneiformParser.SimpleNumberContext):
+        if not self.complex:
+            self.commit()
+
+    def exitHdivider(self, ctx:CuneiformParser.HdividerContext):
         self.commit()
+        self.words.append([len(self.compounds), False])
+        self.capitalized = False
+        self.compounds.append([None, self.language, '; '.join(self.compoundComments)])
+        self.compoundComments = []
+        self.pn_type = None
+        self.language = self.default_language
+
+    def exitVdivider(self, ctx:CuneiformParser.VdividerContext):
+        self.commit()
+        self.words.append([len(self.compounds), False])
+        self.capitalized = False
+        self.compounds.append([None, self.language, '; '.join(self.compoundComments)])
+        self.compoundComments = []
+        self.pn_type = None
+        self.language = self.default_language
+
 
     # Complexes
 
     def enterSignComplex(self, ctx:CuneiformParser.SignComplexContext):
-        self.complex = True
+        self.complex += 1
 
     def enterSignSum(self, ctx:CuneiformParser.SignSumContext):
-        self.complex = True
+        self.complex += 1
 
     def enterNumberComplex(self, ctx:CuneiformParser.NumberComplexContext):
-        self.complex = True
+        self.complex += 1
+
+    def exitSignComplex(self, ctx:CuneiformParser.SignComplexContext):
+        self.complex -= 1
+        if not self.complex:
+            self.commit()
+
+    def exitSignSum(self, ctx:CuneiformParser.SignSumContext):
+        self.complex -= 1
+        if not self.complex:
+            self.commit()
+
+    def exitNumberComplex(self, ctx:CuneiformParser.NumberComplexContext):
+        self.complex -= 1
+        if not self.complex:
+            self.commit()
 
 
     # Operators
@@ -249,7 +311,7 @@ class Listener(CuneiformListener):
     def exitValueT(self, ctx:CuneiformParser.ValueTContext):
         if self.col < 0:
             self.col = ctx.start.column
-        self.value += ctx.getText()
+        self.value += ctx.getText().lower()
 
     def exitCvalueT(self, ctx:CuneiformParser.CvalueTContext):
         if self.col < 0:
@@ -260,6 +322,11 @@ class Listener(CuneiformListener):
         if self.col < 0:
             self.col = ctx.start.column
         self.value += 'd'
+
+    def exitDualT(self, ctx:CuneiformParser.DualTContext):
+        if self.col < 0:
+            self.col = ctx.start.column
+        self.value += 'II'
 
     def exitSignT(self, ctx:CuneiformParser.SignTContext):
         if self.col < 0:
@@ -282,12 +349,10 @@ class Listener(CuneiformListener):
     def exitXT(self, ctx:CuneiformParser.XTContext):
         if self.col < 0:
             self.col = ctx.start.column
-        self.value += 'X'
-    
-    def exitNumberXT(self, ctx:CuneiformParser.NumberXTContext):
-        if self.col < 0:
-            self.col = ctx.start.column
-        self.value += 'N'
+        if self.sign_type == 'number':
+            self.value += 'N'
+        else:
+            self.value += 'X'
 
     def exitDotsT(self, ctx:CuneiformParser.DotsTContext):
         if self.col < 0:
@@ -301,7 +366,17 @@ class Listener(CuneiformListener):
             self.value += ctx.DESC().getText().replace('\\', r'\\')
         else:
             self.value += ctx.DESC().getText()[1:-1].replace('\\', r'\\')
-            self.sign_type = 'desc'
+            self.sign_type = 'description'
+
+    def exitHdividerT(self, ctx:CuneiformParser.HdividerTContext):
+        if self.col < 0:
+            self.col = ctx.start.column
+        self.value += ctx.getText()
+
+    def exitVdividerT(self, ctx:CuneiformParser.VdividerTContext):
+        if self.col < 0:
+            self.col = ctx.start.column
+        self.value += ctx.getText() if ctx.getText() else '='
 
 
     def exitMod(self, ctx:CuneiformParser.ModContext):
@@ -310,17 +385,33 @@ class Listener(CuneiformListener):
         else:
             self.value += ctx.getText()
 
+    def exitVariant(self, ctx:CuneiformParser.VariantContext):
+        if self.sign_type == 'value':
+            self.crits += ctx.getText()
+        else:
+            self.value += ctx.getText()
+
     def exitCrit(self, ctx:CuneiformParser.CritContext):
-        self.crits += ctx.getText()
+        if ctx.getText() == '#':
+            self.processHashCondition(ctx.start.line, ctx.start.column)
+        elif self.signs:
+            self.signs[-1][9] += ctx.getText()
 
     def exitComment(self, ctx:CuneiformParser.CommentContext):
-        self.comments.append(ctx.getText()[1:-1].replace('\\', r'\\'))
+        if self.signs:
+            self.signs[-1][10].append(ctx.getText()[1:-1].replace('\\', r'\\'))
+
+    def exitCompoundComment(self, ctx:CuneiformParser.CompoundCommentContext):
+        self.compoundComments.append(ctx.getText()[1:-1].replace('\\', r'\\'))
 
 
     # Newline
 
-    def exitNl(self, ctx:CuneiformParser.NlContext):
+    def exitNlT(self, ctx:CuneiformParser.NlTContext):
         self.line_no += 1
+        if self.condition != 'intact':
+            self.errorListener.syntaxError(None, None, ctx.start.line, ctx.start.column, 'Unclosed condition bracket', None)
+            self.condition = 'intact'
 
     def exitSlash(self, ctx:CuneiformParser.SlashContext):
         if self.complex:
@@ -344,24 +435,23 @@ class Listener(CuneiformListener):
             self.condition = 'intact'
 
     def processInternalConditions(self, line, col):
-        condition = self.condition
-        suffix_col = col+len(self.value)
         if re.search(r'[\[\]]', self.value):
             for i, c in enumerate(self.value):
                 if c in '[]':
                     self.processCondition(c, line, col+i)
             self.value = re.sub(r'[\[\]]', '', self.value)
-            condition = 'damaged'
-        if self.condition_suffix:
-            self.processCondition(self.condition_suffix, line, suffix_col)
-            self.condition_suffix = None
-        return condition
+            return 'damaged'
+        return self.condition
+
+    def processHashCondition(self, line, col):
+        if self.signs:
+            if self.signs[-1][3] != 'intact':
+                self.errorListener.syntaxError(None, None, line, col, 'Invalid damage hash', None)
+            else:
+                self.signs[-1][3] = 'damaged'
 
     def exitOpenCondition(self, ctx:CuneiformParser.OpenConditionContext):
         self.processCondition(ctx.getText(), ctx.start.line, ctx.start.column)
 
     def exitCloseCondition(self, ctx:CuneiformParser.CloseConditionContext):
         self.processCondition(ctx.getText(), ctx.start.line, ctx.start.column)
-
-    def exitConditionSuffix(self, ctx:CuneiformParser.ConditionSuffixContext):
-        self.condition_suffix = ctx.getText()

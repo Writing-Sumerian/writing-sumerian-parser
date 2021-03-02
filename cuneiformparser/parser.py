@@ -2,7 +2,6 @@ import sys
 import antlr4
 from antlr4.error import DiagnosticErrorListener
 import pandas as pd
-import regex as re
 
 try:
     from .grammar import CuneiformLexer
@@ -25,7 +24,7 @@ class ErrorListener(antlr4.error.ErrorListener.ErrorListener):
         self.errors.append([line-1, column, offendingSymbol.text.replace('\n', r'\n') if offendingSymbol else '', msg.replace('\n', r'\n')])
 
 
-def parse(text):
+def parse(text, language, stem):
     input = antlr4.InputStream(text)
     lexer = CuneiformLexer(input)
     stream = antlr4.CommonTokenStream(lexer)
@@ -38,7 +37,7 @@ def parse(text):
     parser.addErrorListener(errorListener)
 
     tree = parser.text()
-    listener = Listener(errorListener)
+    listener = Listener(errorListener, language, stem)
     walker = antlr4.ParseTreeWalker()
     walker.walk(listener, tree)
 
@@ -51,17 +50,18 @@ def parse(text):
                                       'phonographic', 
                                       'indicator', 
                                       'alignment', 
+                                      'stem',
                                       'crits', 
                                       'comment',
                                       'newline',
                                       'inverted'])
     compounds = pd.DataFrame(listener.compounds,
-                             columns=['PN', 
+                             columns=['pn_type', 
+                                      'language',
                                       'comment'])
     words =     pd.DataFrame(listener.words,
                              columns=['compound_no', 
-                                      'PN', 
-                                      'language'])
+                                      'capitalized'])
     errors =    pd.DataFrame(errorListener.errors,
                              columns=['line', 
                                       'column', 
