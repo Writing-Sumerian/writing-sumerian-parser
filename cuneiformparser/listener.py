@@ -202,6 +202,9 @@ class Listener(CuneiformListener):
     def enterMaybeSign(self, ctx:CuneiformParser.MaybeSignContext):
         self.sign_type = 'sign'
 
+    def enterXSign(self, ctx:CuneiformParser.XContext):
+        self.sign_type = 'sign'
+
     def enterNumber(self, ctx:CuneiformParser.NumberContext):
         self.sign_type = 'number'
 

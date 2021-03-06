@@ -58,7 +58,7 @@ part : ( detp | pcp )* ( decoratedValue | signs | numbers ) ( ( detc | pcc )+ ( 
 cpart : ( detp | pcp )* decoratedCvalue ( ( detc | pcc )+ ( decoratedValue | signs | numbers ) )* ( dets | pcs )*;
 numbers : ( ( number | maybeNumber ) numberSep )* number ( numberSep ( number | maybeNumber ) )*;
 signs : ( ( sign | maybeSign ) ( dot | colon ) )* sign ( ( dot | colon ) ( sign | maybeSign ) )*
-      | decoratedX ( ( dot | colon ) decoratedX )*;
+      | xSign ( ( dot | colon ) xSign )*;
 
 
 
@@ -93,6 +93,7 @@ signFactor : decoratedSimpleSign
            | '(' signComplex ')';
 maybeSignL : decoratedX 
            | decoratedNumberSign;
+xSign : decoratedX;
 
 
 // Numbers
