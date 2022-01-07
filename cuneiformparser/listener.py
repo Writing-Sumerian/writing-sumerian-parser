@@ -1,4 +1,3 @@
-import pandas as pd
 import re
 
 try:
@@ -29,6 +28,7 @@ class Listener(CuneiformListener):
         self.indicator = False
         self.alignment = None
         self.condition = 'intact'
+        self.damaged = False
         self.newline = False
         self.inverted = False
 
@@ -41,52 +41,73 @@ class Listener(CuneiformListener):
 
         self.pn_type = None
         self.language = self.default_language
+        self.comments = []
         self.compoundComments = []
+        self.section = None
 
         self.stem = self.default_stem
 
     def commit(self):
-        condition = self.processInternalConditions(self.line_no, self.col)
         self.signs.append([self.line_no, 
                            len(self.words),
                            self.value, 
-                           condition, 
+                           'lost' if self.value == '…' else 'damaged' if self.damaged else self.condition, 
                            self.sign_type, 
                            self.phonographic, 
                            self.indicator, 
                            self.alignment,
                            self.stem, 
                            self.crits,
-                          [], 
+                           '; '.join(self.comments), 
                            self.newline, 
                            self.inverted])
         self.value = ''
         self.crits = ''
         self.newline = False
         self.inverted = False
+        self.comments = []
         self.col = -1
+        self.damaged = False
 
+    def commitWord(self):
+        self.words.append([len(self.compounds), False])
+        self.capitalized = False
 
-    def exitMeta(self, ctx:CuneiformParser.MetaContext):
-        if ctx.getText() == '_akk_':
-            self.language = 'akkadian'
-        elif ctx.getText() == '_sum_':
-            self.language = 'sumerian'
-        elif ctx.getText() == '_hit_':
-            self.language = 'hittite'
-        elif ctx.getText() in ['_person_', '_place_', '_god_', '_water_', '_field_', '_temple_', '_month_', '_object_']:
-            self.pn_type = ctx.getText()[1:-1]
-            self.capitalized = True
-
-    def exitCompound(self, ctx:CuneiformParser.CompoundContext):
-        self.compounds.append([self.pn_type, self.language, '; '.join(self.compoundComments)])
+    def commitCompound(self):
+        self.compounds.append([self.pn_type, self.language, self.section, '; '.join(self.compoundComments)])
         self.compoundComments = []
         self.pn_type = None
-        self.language = self.default_language
+
+    def exitShift(self, ctx:CuneiformParser.ShiftContext):
+        var = ctx.getText()[1:]
+        val = ''
+        if '=' in var:
+            var, val = var.split('=')
+        if var in ['a', 'akk']:
+            self.language = 'akkadian'
+        elif var in ['s', 'sux', 'eg']:
+            self.language = 'sumerian'
+        elif var in ['h', 'hit']:
+            self.language = 'hittite'
+        elif var in ['person', 'place', 'god', 'water', 'field', 'temple', 'month', 'object']:
+            self.pn_type = var
+            self.capitalized = True
+        elif var == 'sec':
+            self.section = val
+
+    def exitCompound(self, ctx:CuneiformParser.CompoundContext):
+        self.commitCompound()
+
+    def exitHdivCompound(self, ctx:CuneiformParser.HdivCompoundContext):
+        self.commitWord()
+        self.commitCompound()
+
+    def exitVdivCompound(self, ctx:CuneiformParser.VdivCompoundContext):
+        self.commitWord()
+        self.commitCompound()
 
     def exitWord(self, ctx:CuneiformParser.WordContext):
-        self.words.append([len(self.compounds), self.capitalized])
-        self.capitalized = False
+        self.commitWord()
 
     def enterCsegment(self, ctx:CuneiformParser.CsegmentContext):
         self.capitalized = True
@@ -187,84 +208,75 @@ class Listener(CuneiformListener):
     
     # Commits
 
-    def enterValue(self, ctx:CuneiformParser.ValueContext):
+    def enterValueAtom(self, ctx:CuneiformParser.ValueAtomContext):
         self.sign_type = 'value'
 
-    def enterCvalue(self, ctx:CuneiformParser.CvalueContext):
+    def enterCvalueAtom(self, ctx:CuneiformParser.CvalueAtomContext):
         self.sign_type = 'value'
 
-    def enterDetValue(self, ctx:CuneiformParser.DetValueContext):
+    def enterDetValueAtom(self, ctx:CuneiformParser.DetValueAtomContext):
         self.sign_type = 'value'
 
-    def enterSign(self, ctx:CuneiformParser.SignContext):
+    def enterSignAtom(self, ctx:CuneiformParser.SignAtomContext):
         self.sign_type = 'sign'
 
-    def enterMaybeSign(self, ctx:CuneiformParser.MaybeSignContext):
+    def enterMaybeSignAtom(self, ctx:CuneiformParser.MaybeSignAtomContext):
         self.sign_type = 'sign'
 
-    def enterXSign(self, ctx:CuneiformParser.XContext):
+    def enterXAtom(self, ctx:CuneiformParser.XAtomContext):
         self.sign_type = 'sign'
 
-    def enterNumber(self, ctx:CuneiformParser.NumberContext):
+    def enterNumberAtom(self, ctx:CuneiformParser.NumberAtomContext):
         self.sign_type = 'number'
 
-    def enterMaybeNumber(self, ctx:CuneiformParser.MaybeNumberContext):
+    def enterMaybeNumberAtom(self, ctx:CuneiformParser.MaybeNumberAtomContext):
         self.sign_type = 'number'
 
-    def enterHdivider(self, ctx:CuneiformParser.HdividerContext):
+    def enterHdividerAtom(self, ctx:CuneiformParser.HdividerAtomContext):
         self.sign_type = 'punctuation'
 
-    def enterVdivider(self, ctx:CuneiformParser.VdividerContext):
+    def enterVdividerAtom(self, ctx:CuneiformParser.VdividerAtomContext):
+        self.sign_type = 'punctuation'
+
+    def enterEmptyLineAtom(self, ctx:CuneiformParser.EmptyLineAtomContext):
         self.sign_type = 'punctuation'
 
 
-    def exitValue(self, ctx:CuneiformParser.ValueContext):
+    def exitValueAtom(self, ctx:CuneiformParser.ValueAtomContext):
         self.commit()
 
-    def exitCvalue(self, ctx:CuneiformParser.CvalueContext):
+    def exitCvalueAtom(self, ctx:CuneiformParser.CvalueAtomContext):
         self.commit()
 
-    def exitDetValue(self, ctx:CuneiformParser.DetValueContext):
+    def exitDetValueAtom(self, ctx:CuneiformParser.DetValueAtomContext):
         self.commit()
 
-    def exitSimpleSign(self, ctx:CuneiformParser.SimpleSignContext):
-        if not self.complex:
-            self.commit()
+    def exitSignAtom(self, ctx:CuneiformParser.SignAtomContext):
+        self.commit()
 
-    def exitNumberSign(self, ctx:CuneiformParser.NumberSignContext):
-        if not self.complex:
-            self.commit()
+    def exitMaybeSignAtom(self, ctx:CuneiformParser.MaybeSignAtomContext):
+        self.commit()
     
-    def exitX(self, ctx:CuneiformParser.XContext):
-        if not self.complex:
-            self.commit()
-
-    def exitDots(self, ctx:CuneiformParser.DotsContext):
-        if not self.complex:
-            self.sign_type = 'damage'
-            self.commit()
-
-    def exitSimpleNumber(self, ctx:CuneiformParser.SimpleNumberContext):
-        if not self.complex:
-            self.commit()
-
-    def exitHdivider(self, ctx:CuneiformParser.HdividerContext):
+    def exitXAtom(self, ctx:CuneiformParser.XAtomContext):
         self.commit()
-        self.words.append([len(self.compounds), False])
-        self.capitalized = False
-        self.compounds.append([None, self.language, '; '.join(self.compoundComments)])
-        self.compoundComments = []
-        self.pn_type = None
-        self.language = self.default_language
 
-    def exitVdivider(self, ctx:CuneiformParser.VdividerContext):
+    def exitNumberAtom(self, ctx:CuneiformParser.NumberAtomContext):
         self.commit()
-        self.words.append([len(self.compounds), False])
-        self.capitalized = False
-        self.compounds.append([None, self.language, '; '.join(self.compoundComments)])
-        self.compoundComments = []
-        self.pn_type = None
-        self.language = self.default_language
+
+    def exitMaybeNumberAtom(self, ctx:CuneiformParser.MaybeNumberAtomContext):
+        self.commit()
+
+    def exitHdividerAtom(self, ctx:CuneiformParser.HdividerAtomContext):
+        self.commit()
+
+    def exitVdividerAtom(self, ctx:CuneiformParser.VdividerAtomContext):
+        self.commit()
+
+    def exitEmptyLineAtom(self, ctx:CuneiformParser.EmptyLineAtomContext):
+        if self.col < 0:
+            self.col = ctx.start.column
+        self.value += '='
+        self.commit()
 
 
     # Complexes
@@ -272,26 +284,14 @@ class Listener(CuneiformListener):
     def enterSignComplex(self, ctx:CuneiformParser.SignComplexContext):
         self.complex += 1
 
-    def enterSignSum(self, ctx:CuneiformParser.SignSumContext):
-        self.complex += 1
-
     def enterNumberComplex(self, ctx:CuneiformParser.NumberComplexContext):
         self.complex += 1
 
     def exitSignComplex(self, ctx:CuneiformParser.SignComplexContext):
         self.complex -= 1
-        if not self.complex:
-            self.commit()
-
-    def exitSignSum(self, ctx:CuneiformParser.SignSumContext):
-        self.complex -= 1
-        if not self.complex:
-            self.commit()
 
     def exitNumberComplex(self, ctx:CuneiformParser.NumberComplexContext):
         self.complex -= 1
-        if not self.complex:
-            self.commit()
 
 
     # Operators
@@ -314,12 +314,12 @@ class Listener(CuneiformListener):
     def exitValueT(self, ctx:CuneiformParser.ValueTContext):
         if self.col < 0:
             self.col = ctx.start.column
-        self.value += ctx.getText().lower()
+        self.value += self.processInternalConditions(ctx.getText().lower(), self.line_no, self.col)
 
     def exitCvalueT(self, ctx:CuneiformParser.CvalueTContext):
         if self.col < 0:
             self.col = ctx.start.column
-        self.value += ctx.getText().lower()
+        self.value += self.processInternalConditions(ctx.getText().lower(), self.line_no, self.col)
 
     def exitDT(self, ctx:CuneiformParser.DTContext):
         if self.col < 0:
@@ -334,12 +334,12 @@ class Listener(CuneiformListener):
     def exitSignT(self, ctx:CuneiformParser.SignTContext):
         if self.col < 0:
             self.col = ctx.start.column
-        self.value += ctx.getText()
+        self.value += self.processInternalConditions(ctx.getText(), self.line_no, self.col)
 
     def exitNnsignT(self, ctx:CuneiformParser.NnsignTContext):
         if self.col < 0:
             self.col = ctx.start.column
-        self.value += ctx.getText()
+        self.value += self.processInternalConditions(ctx.getText(), self.line_no, self.col)
 
     def exitNumberT(self, ctx:CuneiformParser.NumberTContext):
         if self.col < 0:
@@ -347,7 +347,7 @@ class Listener(CuneiformListener):
         if ctx.N():
             self.value += 'N'
         else:
-            self.value += ctx.getText()
+            self.value += self.processInternalConditions(ctx.getText(), self.line_no, self.col)
 
     def exitXT(self, ctx:CuneiformParser.XTContext):
         if self.col < 0:
@@ -357,7 +357,7 @@ class Listener(CuneiformListener):
         else:
             self.value += 'X'
 
-    def exitDotsT(self, ctx:CuneiformParser.DotsTContext):
+    def exitEllipsisT(self, ctx:CuneiformParser.EllipsisTContext):
         if self.col < 0:
             self.col = ctx.start.column
         self.value += '…'
@@ -397,12 +397,11 @@ class Listener(CuneiformListener):
     def exitCrit(self, ctx:CuneiformParser.CritContext):
         if ctx.getText() == '#':
             self.processHashCondition(ctx.start.line, ctx.start.column)
-        elif self.signs:
-            self.signs[-1][9] += ctx.getText()
+        else:
+            self.crits += ctx.getText()
 
     def exitComment(self, ctx:CuneiformParser.CommentContext):
-        if self.signs:
-            self.signs[-1][10].append(ctx.getText()[1:-1].replace('\\', r'\\'))
+        self.comments.append(ctx.getText()[1:-1].replace('\\', r'\\'))
 
     def exitCompoundComment(self, ctx:CuneiformParser.CompoundCommentContext):
         self.compoundComments.append(ctx.getText()[1:-1].replace('\\', r'\\'))
@@ -410,11 +409,29 @@ class Listener(CuneiformListener):
 
     # Newline
 
-    def exitNlT(self, ctx:CuneiformParser.NlTContext):
+    def nl(self, ctx):
         self.line_no += 1
         if self.condition != 'intact':
             self.errorListener.syntaxError(None, None, ctx.start.line, ctx.start.column, 'Unclosed condition bracket', None)
             self.condition = 'intact'
+        self.language = self.default_language
+
+    def exitNl(self, ctx:CuneiformParser.NlContext):
+        self.nl(ctx)
+    def exitDashNl(self, ctx:CuneiformParser.DashNlContext):
+        self.nl(ctx)
+    def exitDoubleDashNl(self, ctx:CuneiformParser.DoubleDashNlContext):
+        self.nl(ctx)
+    def exitDotNl(self, ctx:CuneiformParser.DotNlContext):
+        self.nl(ctx)
+    def exitCommaNl(self, ctx:CuneiformParser.CommaNlContext):
+        self.nl(ctx)
+    def exitSemicolonNl(self, ctx:CuneiformParser.SemicolonNlContext):
+        self.nl(ctx)
+    def exitTildeNl(self, ctx:CuneiformParser.TildeNlContext):
+        self.nl(ctx)
+    def exitSTildeNl(self, ctx:CuneiformParser.STildeNlContext):
+        self.nl(ctx)
 
     def exitSlash(self, ctx:CuneiformParser.SlashContext):
         if self.complex:
@@ -422,10 +439,18 @@ class Listener(CuneiformListener):
         else:
             self.newline = True
 
-
     # Conditions
 
-    conditionMap = {'\n': 'intact',  '[': 'lost', ']': 'lost', '⸢': 'damaged', '⸣': 'damaged', '‹': 'inserted', '›': 'inserted', '«': 'deleted', '»': 'deleted'}
+    conditionMap = {
+        '\n': 'intact',  
+        '[': 'lost', 
+        ']': 'lost', 
+        '⸢': 'damaged', 
+        '⸣': 'damaged', 
+        '‹': 'inserted', 
+        '›': 'inserted', 
+        '«': 'deleted', 
+        '»': 'deleted'}
 
     def processCondition(self, c, line, col):
         if c in '[⸢‹«':
@@ -437,21 +462,20 @@ class Listener(CuneiformListener):
                 self.errorListener.syntaxError(None, None, line, col, 'Unbalanced condition brackets', None)
             self.condition = 'intact'
 
-    def processInternalConditions(self, line, col):
-        if re.search(r'[\[\]]', self.value):
-            for i, c in enumerate(self.value):
+    def processInternalConditions(self, value, line, col):
+        if re.search(r'[\[\]]', value):
+            for i, c in enumerate(value):
                 if c in '[]':
                     self.processCondition(c, line, col+i)
-            self.value = re.sub(r'[\[\]]', '', self.value)
-            return 'damaged'
-        return self.condition
+            value = re.sub(r'[\[\]]', '', value)
+            self.damaged = True
+        return value
 
     def processHashCondition(self, line, col):
-        if self.signs:
-            if self.signs[-1][3] != 'intact':
-                self.errorListener.syntaxError(None, None, line, col, 'Invalid damage hash', None)
-            else:
-                self.signs[-1][3] = 'damaged'
+        if self.condition != 'intact':
+            self.errorListener.syntaxError(None, None, line, col, 'Invalid damage hash', None)
+        else:
+            self.damaged = True
 
     def exitOpenCondition(self, ctx:CuneiformParser.OpenConditionContext):
         self.processCondition(ctx.getText(), ctx.start.line, ctx.start.column)
