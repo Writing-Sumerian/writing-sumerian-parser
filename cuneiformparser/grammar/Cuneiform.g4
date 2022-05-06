@@ -5,37 +5,48 @@ fragment LCON  : [bdgĝhḫjklmnpqrřsšṣtṭwyz’];
 fragment LVOWEL: [aeiu];
 fragment UCON  : [BDGĜHḪJKLMNPQRŘSŠṢTṬWYZ];
 fragment UVOWEL: [AEIU];
-fragment USYLL : ( UCON ']'? '['? )? UVOWEL ( ']'? '['? UCON )?;
+fragment USYLL : ( ( UCON | '’' ) ']'? '['? )? UVOWEL ( ']'? '['? ( UCON | '’' ) )?;
 fragment LSYLL : ( LCON ']'? '['? )? LVOWEL ( ']'? '['? LCON )?;
 fragment CSYLL : UCON ']'? '['? LVOWEL ( ']'? '['? LCON )? 
                | ( '’' ']'? '['? ) UVOWEL ( ']'? '['? LCON )?
                | UVOWEL ']'? '['? LCON;
 fragment PNUM  : [1-9] [0-9]*;
 fragment FRAC  : [½⅓⅔¼¾⅕⅖⅗⅘⅙⅚⅐⅛⅜⅝⅞⅑⅒];
+fragment INDEX : [1-9] [0-9]?;
+
+fragment ABBR  : 'B' ']'? '['? 'A' ']'? '['? 'U' 
+               | 'L' ']'? '['? 'A' ']'? '['? 'K' 
+               | 'K' ']'? '['? 'W' ']'? '['? 'U' 
+               | 'R' ']'? '['? 'E' ']'? '['? 'C' 
+               | 'R' ']'? '['? 'S' ']'? '['? 'P' 
+               | 'Z' ']'? '['? 'A' ']'? '['? 'T' ']'? '['? 'U' 
+               | 'E' ']'? '['? 'L' ']'? '['? 'L' ']'? '['? 'E' ']'? '['? 'S';
 
 DESC           : '"' ~["\n]* '"';
-SHIFT           : '%' ~[ \n]+;
-NUMBER         : '0' | PNUM ( '/' PNUM | FRAC )? | FRAC;
+SHIFT          : '%' [a-z] ~[ \n]*;
+NUMBER         : '0' | ( PNUM ( '/' PNUM | FRAC )? | FRAC ) ( '(' [cdf] ')' )?;
 
-VOWELSIGN      : UVOWEL PNUM?;
-SIGN           : USYLL ( ']'? '['? USYLL )* PNUM?;
-NNSIGN         : ( 'BAU' | 'LAK' | 'KWU' | 'REC' | 'RSP' | 'ZATU' | 'ELLES' ) ( PNUM | [0-9] [0-9] [0-9] ) ( [a-c] | 'bis' | 'ter' )?;
-VALUE          : LSYLL ( ']'? '['? LSYLL )* (PNUM | X)? ('⁺'+ | '⁻'+)?
+VOWELSIGN      : UVOWEL INDEX?;
+SIGN           : USYLL ( ']'? '['? USYLL )* INDEX?;
+NNSIGN         : ABBR ( PNUM | [0-9] [0-9] [0-9] ) ( [a-c] | 'bis' | 'ter' )?;
+VALUE          : LSYLL ( ']'? '['? LSYLL )* (INDEX | X)? ('⁺'+ | '⁻'+)?
                | '’';
-CVALUE         : CSYLL ( ']'? '['? LSYLL )* (PNUM | X)? ('⁺'+ | '⁻'+)?
-               | UVOWEL ( ']'? '['? LSYLL )+ (PNUM | X)? ('⁺'+ | '⁻'+)?;
+CVALUE         : CSYLL ( ']'? '['? LSYLL )* (INDEX | X)? ('⁺'+ | '⁻'+)?
+               | UVOWEL ( ']'? '['? LSYLL )+ (INDEX | X)? ('⁺'+ | '⁻'+)?;
 
 X              : [Xx];
-N              : [Nn];
+N              : [Nn] ( '(' [cdf] ')' )?;
 D              : 'd';
 DUAL           : 'II';
-MOD            : '@' ( [tgšnkzicvabx] | '90' );
-CRIT           : [?!~*#];
+MOD            : '@' ( [tgšnkzicdfvabx] | '90' | '45' );
+CRIT           : [!~*#];
 VARIANT        : '~' ( [a-z] PNUM? )?;
-ABOVE          : '&' | '%';
+SIGNOP         : '&' | '%' | '@';
 OCONDITION     : [[⸢‹«];
 CCONDITION     : [\]⸣›»];
 DOUBLEBAR      : '||';
+
+VDIVIDER       : '$' ~'$'* '$';
 
 DASHNL         : '-' ' '* '\n' ' '*;
 DOUBLEDASHNL   : '--' ' '* '\n' ' '*;
@@ -46,17 +57,19 @@ TILDENL        : '~' ' '* '\n' ' '*;
 STILDENL       : ' '* '\n' ' '* '~';
 SPACE          : ' '+;
 
+QMARK          : '?';
+
 OTHER          : .;
 
 
 text           : line ( nl line )* EOF;
-line           : space? openCondition? ( compound | hdivCompound ) ( spaceSep ( compound | hdivCompound ) )* closeCondition? space?
+line           : space? oConLog? ( compound | hdivCompound | shift ) ( spaceSep ( compound | hdivCompound | shift ) )* cConLog? space?
                | vdivCompound;
 
 vdivCompound   : space? openCondition? vdividerAtom ( closeCondition? space? compoundComment)? closeCondition? space?
                | emptyLineAtom;
 hdivCompound   : hdividerAtom ( closeCondition? space? compoundComment )?;
-compound       : ( shift space openCondition? )* word ( doubleDash word )* ( closeCondition? space compoundComment )*;
+compound       : word ( doubleDash word )* ( cConLog? space compoundComment )*;
 
 word           : ( cprefix | prefix ) ( dash | colon ) '⟨' openCondition? stem closeCondition? '⟩'( ( dash | colon ) suffix )?
                | '⟨' openCondition? ( cstem | stem ) closeCondition? '⟩' ( ( dash | colon ) suffix )?
@@ -72,8 +85,12 @@ suffix         : segment;
 segment        : part ( ( dash | colon ) part )*;
 csegment       : cpart  ( ( dash | colon ) part )*;
 
-part           : ( detp | pcp )* ( valueAtom | signs | numbers ) ( ( detc | pcc )+ ( valueAtom | signs | numbers ) )* ( dets | pcs )*;
-cpart          : ( detp | pcp )* cvalueAtom ( ( detc | pcc )+ ( valueAtom | signs | numbers ) )* ( dets | pcs )*;
+part           : ( detp | pcp )* ( values | nonValues ) ( ( detc | pcc )+ ( values | nonValues ) )* ( dets | pcs )*;
+cpart          : ( detp | pcp )* cvalues ( ( detc | pcc )+ ( values | nonValues ) )* ( dets | pcs )*;
+
+values         : valueAtom ( plus valueAtom )* ( plus nonValues )?;
+cvalues        : cvalueAtom ( plus valueAtom )* ( plus nonValues )?;
+nonValues      : ( numbers | signs ) ( plus values )?;
 
 numbers        : ( maybeNumberAtom numberSep )* numberAtom ( numberSep ( numberAtom | maybeNumberAtom ) )*;
 signs          : ( maybeSignAtom ( dot | colon ) )* signAtom ( ( dot | colon ) ( signAtom | maybeSignAtom ) )*
@@ -83,15 +100,15 @@ signs          : ( maybeSignAtom ( dot | colon ) )* signAtom ( ( dot | colon ) (
 
 // Determinatives & Phonetic Complements
 
-detp           : det ( colon | nullSepP );
-dets           : ( colon | nullSepS ) det;
-detc           : ( colon | nullSepS ) det ( colon | nullSepP );
-pcp            : pc ( colon | nullSepP );
-pcs            : ( colon | nullSepS ) pc;
-pcc            : ( colon | nullSepS ) pc ( colon | nullSepP );
+detp           : det ( colon | plus | nullSepP );
+dets           : ( colon | plus | nullSepS ) det;
+detc           : ( colon | plus | nullSepS ) det ( colon | plus | nullSepP );
+pcp            : pc ( colon | plus | nullSepP );
+pcs            : ( colon | plus | nullSepS ) pc;
+pcc            : ( colon | plus | nullSepS ) pc ( colon | plus | nullSepP );
 
 det            : '{' openCondition? ( detValueAtom | signAtom | valueAtom ) ( ( dot | colon ) ( detValueAtom | signAtom | valueAtom ) )* closeCondition? '}';
-pc             : '<' openCondition? ( sign | valueAtom ) ( ( dash | colon ) ( sign | valueAtom ) )* closeCondition? '>';
+pc             : '<' openCondition? ( signAtom | valueAtom ) ( ( dash | colon ) ( signAtom | valueAtom ) )* closeCondition? '>';
 
 
 // Atoms
@@ -114,16 +131,22 @@ xAtom          : x;
 sign           : ellipsis
                | simpleSign
                | signComplex
+               | modifiedSign
                | '|' openCondition? explicitSign closeCondition? '|' ( crit | comment )*;
 explicitSign   : ( maybeSign dotOp )* sign ( dotOp ( sign | maybeSign ) )*;
 signComplex    : signSum
                | signProd;
-signSum        : ( maybeSign plus )* ( signProd | simpleSign ) ( plus ( signProd | simpleSign | maybeSign ) )+
-               | ( maybeSign plus )+ ( signProd | simpleSign );
-signProd       : ( maybeSign ( times | above ) )* signFactor ( ( times | above ) ( signFactor | maybeSign ) )+
-               | ( maybeSign ( times | above ) )+ signFactor;
+signSum        : ( maybeSign plusOp )* signSummand ( plusOp ( signSummand | maybeSign ) )+
+               | ( maybeSign plusOp )+ signSummand;
+signSummand    : simpleSign
+               | signProd
+               | modifiedSign;
+signProd       : ( maybeSign ( times | signOp ) )* signFactor ( ( times | signOp ) ( signFactor | maybeSign ) )+
+               | ( maybeSign ( times | signOp ) )+ signFactor;
 signFactor     : simpleSign
-               | '(' openCondition? explicitSign closeCondition? ')';
+               | modifiedSign
+               | lparenOp openCondition? explicitSign closeCondition? rparenOp;
+modifiedSign   : lparenOp openCondition? explicitSign closeCondition? rparenOp mod+; 
 maybeSign      : x
                | ambiguousSign;
 
@@ -134,54 +157,62 @@ number         : simpleNumber
                | numberComplex;
 numberComplex  : numberSum
                | numberProd;
-numberSum      : ( maybeNumber plus )* ( numberProd | simpleNumber ) ( plus ( numberProd | simpleNumber | maybeNumber ) )+
-               | ( maybeNumber plus )+ ( numberProd | simpleNumber );
+numberSum      : ( maybeNumber plusOp )* ( numberProd | simpleNumber ) ( plusOp ( numberProd | simpleNumber | maybeNumber ) )+
+               | ( maybeNumber plusOp )+ ( numberProd | simpleNumber );
 numberProd     : ( maybeNumber ( times | div ) )* numberFactor ( ( times | div ) ( numberFactor | maybeNumber ) )+
                | ( maybeNumber ( times | div ) )+ numberFactor;
 numberFactor   : simpleNumber 
-               | '(' openCondition? numberSum closeCondition? ')';
+               | lparenOp openCondition? numberSum closeCondition? rparenOp;
 maybeNumber    : x 
                | ellipsis;
 
 
 // Characters
 
-value          : ( valueT | descT ) variant? mod* ( crit | comment )*;
-cvalue         : cvalueT variant? mod* ( crit | comment )*;
-detValue       : ( dT | dualT ) ( crit | comment )*;
-simpleSign     : ( signT | nnsignT ) variant? mod* ( crit | comment )*;
-ambiguousSign  : ( numberT | descT ) variant? mod* ( crit | comment )*;
-simpleNumber   : ( plusCrit? numberT | numberT plusCrit ) ( crit | comment )*;
-x              : xT ( crit | comment )*;
+value          : ( valueT | descT ) variant? mod* ( crit | signSpec | comment )*;
+cvalue         : cvalueT variant? mod* ( crit | signSpec | comment )*;
+detValue       : ( dT | dualT ) ( crit | signSpec | comment )*;
+simpleSign     : ( signT | nnsignT ) variant? mod* ( crit | signSpec | comment )*;
+ambiguousSign  : ( numberT ) variant? mod* ( crit | comment )*;
+simpleNumber   : ( plusCrit? numberT | numberT plusCrit ) ( crit | signSpec | comment )*;
+x              : xT ( crit | signSpec | comment )*;
 ellipsis       : ellipsisT ( crit | comment )*;
-vdivider       : vdividerT crit*;
-hdivider       : hdividerT crit*;
+vdivider       : vdividerT ( crit | comment )*;
+hdivider       : hdividerT ( crit | comment )*;
 
 
 // Separators
 
-dash           : closeCondition? ( '-' ( slash )? | DASHNL ) openCondition?;
-doubleDash     : closeCondition? ( '--' ( slash )? | DOUBLEDASHNL ) openCondition?;
+dash           : cConLog? ( '-' ( slash )? | DASHNL ) oConLog?;
+doubleDash     : cConLog? ( '--' ( slash )? | DOUBLEDASHNL ) oConLog?;
 dot            : closeCondition? ( '.' ( slash )? | DOTNL ) openCondition?;
-colon          : closeCondition? ':' ( slash )? openCondition?;
-spaceSep       : closeCondition? ( space ( slash space | colon space )? ) openCondition?;
+colon          : cConLog? ':' ( slash )? oConLog?;
+plus           : closeCondition? '+' openCondition?;
+spaceSep       : cConLog? ( space ( slash space | colon space )? ) oConLog?;
 numberSep      : closeCondition? ( ('.'|','|';') ( slash )? | DOTNL | COMMANL | SEMICOLONNL ) openCondition?;
-nullSepP       : closeCondition? ( slash | TILDENL )? openCondition?;
-nullSepS       : closeCondition? ( slash | STILDENL )? openCondition?;
+nullSepP       : cConLog? ( slash | TILDENL )? oConLog?;
+nullSepS       : cConLog? ( slash | STILDENL )? oConLog?;
 
 // Operators
 
 dotOp          : closeCondition? '.' openCondition?;
-plus           : closeCondition? '+' openCondition?;
+plusOp         : closeCondition? '+' openCondition?;
 times          : closeCondition? X | '×' openCondition?;
 div            : closeCondition? '/' openCondition?;
-above          : closeCondition? ABOVE openCondition?;
+signOp         : closeCondition? SIGNOP openCondition?;
+lparenOp       : '(';
+rparenOp       : ')';
 
 
 // Conditions
 
 openCondition  : OCONDITION;
 closeCondition : CCONDITION;
+
+oConLog        : openCondition log?
+               | log openCondition?;
+cConLog        : closeCondition log?
+               | log closeCondition?;
 
 
 // Terminals
@@ -197,18 +228,21 @@ xT             : X;
 numberXT       : X;
 ellipsisT      : '…';
 descT          : DESC;
-vdividerT      : '=' | '–';
+vdividerT      : '=' | '–' | VDIVIDER;
 hdividerT      : '|' | DOUBLEBAR;
 space          : SPACE;
 
 mod            : MOD;
-crit           : CRIT;
+crit           : CRIT | QMARK;
 variant        : VARIANT;
 plusCrit       : '+';
 
+log            : '_';
+
 compoundComment: '(' ( subcomment | ~( '(' | ')' | '\n' ) )* ')';
-comment        : '(' ( subcomment | ~( '(' | ')' | '\n' ) )* ')';
 subcomment     : '(' ( subcomment | ~( '(' | ')' | '\n' ) )* ')';
+comment        : '(' ( subcomment | ~( '(' | ')' | '\n' ) )* QMARK ')';
+signSpec       : '(' explicitSign ')';
 
 shift          : SHIFT;
 
@@ -221,8 +255,3 @@ commaNl        : COMMANL;
 semicolonNl    : SEMICOLONNL;
 tildeNl        : TILDENL;
 sTildeNl       : STILDENL;
-
-
-
-
-

@@ -25,17 +25,20 @@ class Listener(CuneiformListener):
         self.col = 0
         self.sign_type = None
         self.phonographic = None
+        self.logogramm = False
         self.indicator = False
         self.alignment = None
         self.condition = 'intact'
         self.damaged = False
         self.newline = False
         self.inverted = False
+        self.ligature = False
 
         self.value = ''
+        self.signSpec = ''
         self.crits = ''
 
-        self.complex = 0
+        self.spec = False
 
         self.capitalized = False
 
@@ -50,21 +53,25 @@ class Listener(CuneiformListener):
     def commit(self):
         self.signs.append([self.line_no, 
                            len(self.words),
-                           self.value, 
-                           'lost' if self.value == '…' else 'damaged' if self.damaged else self.condition, 
+                           self.value if self.value else None,
+                           self.signSpec if self.signSpec else None, 
                            self.sign_type, 
-                           self.phonographic, 
                            self.indicator, 
                            self.alignment,
+                           False if self.logogramm else self.phonographic, 
+                           'lost' if self.value == '…' else 'damaged' if self.damaged else self.condition,
                            self.stem, 
                            self.crits,
-                           '; '.join(self.comments), 
+                           '; '.join(self.comments) if self.comments else None, 
                            self.newline, 
-                           self.inverted])
+                           self.inverted,
+                           self.ligature])
         self.value = ''
+        self.signSpec = ''
         self.crits = ''
         self.newline = False
         self.inverted = False
+        self.ligature = False
         self.comments = []
         self.col = -1
         self.damaged = False
@@ -74,13 +81,13 @@ class Listener(CuneiformListener):
         self.capitalized = False
 
     def commitCompound(self):
-        self.compounds.append([self.pn_type, self.language, self.section, '; '.join(self.compoundComments)])
+        self.compounds.append([self.pn_type, self.language, self.section, '; '.join(self.compoundComments) if self.compoundComments else None])
         self.compoundComments = []
         self.pn_type = None
 
     def exitShift(self, ctx:CuneiformParser.ShiftContext):
         var = ctx.getText()[1:]
-        val = ''
+        val = None
         if '=' in var:
             var, val = var.split('=')
         if var in ['a', 'akk']:
@@ -89,11 +96,14 @@ class Listener(CuneiformListener):
             self.language = 'sumerian'
         elif var in ['h', 'hit']:
             self.language = 'hittite'
-        elif var in ['person', 'place', 'god', 'water', 'field', 'temple', 'month', 'object']:
+        elif var in ['person', 'place', 'god', 'water', 'field', 'temple', 'month', 'object', 'ethnicity']:
             self.pn_type = var
             self.capitalized = True
         elif var == 'sec':
             self.section = val
+
+    def exitLog(self, ctx:CuneiformParser.LogContext):
+        self.logogramm = not self.logogramm
 
     def exitCompound(self, ctx:CuneiformParser.CompoundContext):
         self.commitCompound()
@@ -279,34 +289,52 @@ class Listener(CuneiformListener):
         self.commit()
 
 
-    # Complexes
+    # Sign Spec
 
-    def enterSignComplex(self, ctx:CuneiformParser.SignComplexContext):
-        self.complex += 1
+    def enterSignSpec(self, ctx:CuneiformParser.SignSpecContext):
+        self.spec = True
 
-    def enterNumberComplex(self, ctx:CuneiformParser.NumberComplexContext):
-        self.complex += 1
-
-    def exitSignComplex(self, ctx:CuneiformParser.SignComplexContext):
-        self.complex -= 1
-
-    def exitNumberComplex(self, ctx:CuneiformParser.NumberComplexContext):
-        self.complex -= 1
+    def exitSignSpec(self, ctx:CuneiformParser.SignSpecContext):
+        self.spec = False
 
 
     # Operators
 
     def exitDotOp(self, ctx:CuneiformParser.DotOpContext):
-        self.value += '.'
+        if self.spec:
+            self.signSpec += '.'
+        else:
+            self.value += '.'
 
-    def exitPlus(self, ctx:CuneiformParser.PlusContext):
-        self.value += '+'
+    def exitPlusOp(self, ctx:CuneiformParser.PlusOpContext):
+        if self.spec:
+            self.signSpec += '+'
+        else:
+            self.value += '+'
 
     def exitTimes(self, ctx:CuneiformParser.TimesContext):
-        self.value += '×'
+        if self.spec:
+            self.signSpec += '×'
+        else:
+            self.value += '×'
+            
+    def exitSignOp(self, ctx:CuneiformParser.SignOpContext):
+        if self.spec:
+            self.signSpec += ctx.getText()
+        else:
+            self.value += ctx.getText()
 
-    def exitAbove(self, ctx:CuneiformParser.AboveContext):
-        self.value += '&'
+    def exitLparenOp(self, ctx:CuneiformParser.LparenOpContext):
+        if self.spec:
+            self.signSpec += '('
+        else:
+            self.value += '('
+
+    def exitRparenOp(self, ctx:CuneiformParser.RparenOpContext):
+        if self.spec:
+            self.signSpec += ')'
+        else:
+            self.value += ')'
 
 
     # Terminals
@@ -334,12 +362,18 @@ class Listener(CuneiformListener):
     def exitSignT(self, ctx:CuneiformParser.SignTContext):
         if self.col < 0:
             self.col = ctx.start.column
-        self.value += self.processInternalConditions(ctx.getText(), self.line_no, self.col)
+        if self.spec:
+            self.signSpec += ctx.getText()
+        else:
+            self.value += self.processInternalConditions(ctx.getText(), self.line_no, self.col)
 
     def exitNnsignT(self, ctx:CuneiformParser.NnsignTContext):
         if self.col < 0:
             self.col = ctx.start.column
-        self.value += self.processInternalConditions(ctx.getText(), self.line_no, self.col)
+        if self.spec:
+            self.signSpec += ctx.getText()
+        else:
+            self.value += self.processInternalConditions(ctx.getText(), self.line_no, self.col)
 
     def exitNumberT(self, ctx:CuneiformParser.NumberTContext):
         if self.col < 0:
@@ -354,6 +388,8 @@ class Listener(CuneiformListener):
             self.col = ctx.start.column
         if self.sign_type == 'number':
             self.value += 'N'
+        elif self.spec:
+            self.signSpec += 'X'
         else:
             self.value += 'X'
 
@@ -365,11 +401,8 @@ class Listener(CuneiformListener):
     def exitDescT(self, ctx:CuneiformParser.DescTContext):
         if self.col < 0:
             self.col = ctx.start.column
-        if self.complex:
-            self.value += ctx.DESC().getText().replace('\\', r'\\')
-        else:
-            self.value += ctx.DESC().getText()[1:-1].replace('\\', r'\\')
-            self.sign_type = 'description'
+        self.value += ctx.DESC().getText()[1:-1].replace('\\', r'\\')
+        self.sign_type = 'description'
 
     def exitHdividerT(self, ctx:CuneiformParser.HdividerTContext):
         if self.col < 0:
@@ -383,16 +416,20 @@ class Listener(CuneiformListener):
 
 
     def exitMod(self, ctx:CuneiformParser.ModContext):
-        if self.sign_type == 'value':
-            self.crits += ctx.getText()
-        else:
+        if self.sign_type == 'sign':
             self.value += ctx.getText()
+        elif self.spec:
+            self.signSpec += ctx.getText()
+        else:
+            self.crits += ctx.getText()
 
     def exitVariant(self, ctx:CuneiformParser.VariantContext):
-        if self.sign_type == 'value':
-            self.crits += ctx.getText()
-        else:
+        if self.sign_type == 'sign':
             self.value += ctx.getText()
+        elif self.spec:
+            self.signSpec += ctx.getText()
+        else:
+            self.crits += ctx.getText()
 
     def exitCrit(self, ctx:CuneiformParser.CritContext):
         if ctx.getText() == '#':
@@ -407,6 +444,18 @@ class Listener(CuneiformListener):
         self.compoundComments.append(ctx.getText()[1:-1].replace('\\', r'\\'))
 
 
+    # Separators
+
+    def exitSlash(self, ctx:CuneiformParser.SlashContext):
+        self.newline = True
+
+    def exitColon(self, ctx:CuneiformParser.ColonContext):
+        self.inverted = True
+
+    def exitPlus(self, ctx:CuneiformParser.PlusContext):
+        self.ligature = True
+
+
     # Newline
 
     def nl(self, ctx):
@@ -414,6 +463,9 @@ class Listener(CuneiformListener):
         if self.condition != 'intact':
             self.errorListener.syntaxError(None, None, ctx.start.line, ctx.start.column, 'Unclosed condition bracket', None)
             self.condition = 'intact'
+        if self.logogramm:
+            self.errorListener.syntaxError(None, None, ctx.start.line, ctx.start.column, 'Unpaired underscores', None)
+            self.logogramm = False
         self.language = self.default_language
 
     def exitNl(self, ctx:CuneiformParser.NlContext):
@@ -432,12 +484,7 @@ class Listener(CuneiformListener):
         self.nl(ctx)
     def exitSTildeNl(self, ctx:CuneiformParser.STildeNlContext):
         self.nl(ctx)
-
-    def exitSlash(self, ctx:CuneiformParser.SlashContext):
-        if self.complex:
-            self.value += '/'
-        else:
-            self.newline = True
+    
 
     # Conditions
 
