@@ -38,7 +38,7 @@ X              : [Xx];
 N              : [Nn] ( '(' [cdf] ')' )?;
 D              : 'd';
 DUAL           : 'II';
-MOD            : '@' ( [tgšnkzicdfvabx] | '90' | '45' );
+MOD            : '@' ( [tgšnkzicdfvabx] | '270' | '180' | '90' | '45' | '4' );
 CRIT           : [!~*#];
 VARIANT        : '~' ( [a-z] PNUM? )?;
 SIGNOP         : '&' | '%' | '@';
@@ -85,17 +85,14 @@ suffix         : segment;
 segment        : part ( ( dash | colon ) part )*;
 csegment       : cpart  ( ( dash | colon ) part )*;
 
-part           : ( detp | pcp )* ( values | nonValues ) ( ( detc | pcc )+ ( values | nonValues ) )* ( dets | pcs )*;
-cpart          : ( detp | pcp )* cvalues ( ( detc | pcc )+ ( values | nonValues ) )* ( dets | pcs )*;
+part           : ( detp | pcp )* ( values | numbers | signs ) ( ( detc | pcc )+ ( values | numbers | signs ) )* ( dets | pcs )*;
+cpart          : ( detp | pcp )* cvalues ( ( detc | pcc )+ ( values | numbers | signs ) )* ( dets | pcs )*;
 
-values         : valueAtom ( plus valueAtom )* ( plus nonValues )?;
-cvalues        : cvalueAtom ( plus valueAtom )* ( plus nonValues )?;
-nonValues      : ( numbers | signs ) ( plus values )?;
-
-numbers        : ( maybeNumberAtom numberSep )* numberAtom ( numberSep ( numberAtom | maybeNumberAtom ) )*;
-signs          : ( maybeSignAtom ( dot | colon ) )* signAtom ( ( dot | colon ) ( signAtom | maybeSignAtom ) )*
-               | xAtom ( dot xAtom )*;
-
+values         : valueAtom ( plus valueAtom )* ( plus ( numbers | signs ) )?;
+cvalues        : cvalueAtom ( plus valueAtom )* ( plus ( numbers | signs ) )?;
+numbers        : ( maybeNumberAtom numberSep )* numberAtom ( numberSep ( numberAtom | maybeNumberAtom ) )* ( plus ( values | signs ) )?;
+signs          : ( maybeSignAtom ( dot | colon ) )* signAtom ( ( dot | colon ) ( signAtom | maybeSignAtom ) )* ( plus ( values | numbers ) )?
+               | xAtom ( dot xAtom )* ( plus values )?;
 
 
 // Determinatives & Phonetic Complements
@@ -147,8 +144,7 @@ signFactor     : simpleSign
                | modifiedSign
                | lparenOp openCondition? explicitSign closeCondition? rparenOp;
 modifiedSign   : lparenOp openCondition? explicitSign closeCondition? rparenOp mod+; 
-maybeSign      : x
-               | ambiguousSign;
+maybeSign      : x;
 
 
 // Numbers
@@ -173,7 +169,6 @@ value          : ( valueT | descT ) variant? mod* ( crit | signSpec | comment )*
 cvalue         : cvalueT variant? mod* ( crit | signSpec | comment )*;
 detValue       : ( dT | dualT ) ( crit | signSpec | comment )*;
 simpleSign     : ( signT | nnsignT ) variant? mod* ( crit | signSpec | comment )*;
-ambiguousSign  : ( numberT ) variant? mod* ( crit | comment )*;
 simpleNumber   : ( plusCrit? numberT | numberT plusCrit ) ( crit | signSpec | comment )*;
 x              : xT ( crit | signSpec | comment )*;
 ellipsis       : ellipsisT ( crit | comment )*;
