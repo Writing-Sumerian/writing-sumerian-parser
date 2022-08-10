@@ -4,16 +4,14 @@ from antlr4 import BailErrorStrategy
 from antlr4 import PredictionMode
 import pandas as pd
 from contextlib import ExitStack
-from os import path
 import re
-import itertools
 
 try:
-    from .grammar import CuneiformLexer
-    from .grammar import CuneiformParser
+    from grammar.CuneiformLexer import CuneiformLexer
+    from grammar.CuneiformParser import CuneiformParser
 except:
-    from grammar import CuneiformLexer
-    from grammar import CuneiformParser
+    from .grammar.CuneiformLexer import CuneiformLexer
+    from .grammar.CuneiformParser import CuneiformParser
 
 try:
     from .listener import Listener
@@ -64,8 +62,8 @@ def parse(text, language, stem):
                              columns=['line_no', 
                                       'word_no', 
                                       'value', 
-                                      'signSpec', 
-                                      'sign_type',  
+                                      'sign_spec', 
+                                      'type',  
                                       'indicator', 
                                       'alignment', 
                                       'phonographic',
@@ -94,92 +92,90 @@ def parse(text, language, stem):
 
 def parseLines(lines, language, stem):
 
-    OBJECT = re.compile(r'@(?P<custom>object\s+)?(?P<object>(?(custom).*|(?:tablet|envelope)))')
-    SURFACE = re.compile(r'@(?P<surface>obverse|reverse|top|bottom|left|right|surface|seal|fragment)(?:\s+(?P<data>[^?!*]*))?(?:\s*(?P<comment>[?!*]+))?')
+    OBJECT = re.compile(r'@(?P<object>tablet|envelope|seal|object)(?:\s+(?P<data>[^?!*]*))?(?:\s*(?P<comment>[?!*]+))?')
+    SURFACE = re.compile(r'@(?P<surface>obverse|reverse|top|bottom|left|right|surface|fragment)(?:\s+(?P<data>[^?!*]*))?(?:\s*(?P<comment>[?!*]+))?')
     BLOCK = re.compile(r'@(?P<block>block|(?P<col>column))(?:\s+(?P<data>(?(col)[1-9][0-9]*\'*|[^?!*]*)))?(?:\s*(?P<comment>[?!*]+))?')
 
     class State:
-        def __init__(self, object):
-            self.object = object
+        def __init__(self):
+            self.validObject = False
             self.validSurface = False
             self.validBlock = False
 
-            self.blocks = []
-            self.surfaces = []
             self.objects = []
+            self.surfaces = []
+            self.blocks = []
             self.lines = []
             self.content = []
 
+        def addObject(self, object, data, comment):
+            self.objects.append([object, data, comment])
+            self.validObject = True
+            self.validSurface = False
+            self.validBlock = False
+
         def addSurface(self, surface, data, comment):
-            self.surfaces.append([self.object, surface, data, comment])
+            if not self.validObject:
+                self.addObject('object', None, None)
+            self.surfaces.append([len(self.objects)-1, surface, data, comment])
             self.validSurface = True
             self.validBlock = False
 
         def addBlock(self, block, data, comment):
             if not self.validSurface:
-                self.addSurface(None, None, None)
+                self.addSurface('surface', None, None)
             self.validBlock = True
-            self.blocks.append([self.object, len(self.surfaces)-1, block or None, data, comment])
+            self.blocks.append([len(self.surfaces)-1, block or None, data, comment])
 
         def addLine(self, line, comment, content):
             if not self.validBlock:
-                self.addBlock(None, None, None)
-            self.lines.append([self.object, len(self.blocks)-1, line, comment])
+                self.addBlock('block', None, None)
+            self.lines.append([len(self.blocks)-1, line, comment])
             self.content.append(content)
 
         def parse(self, language, stem):
             self.signs, self.compounds, self.words, self.errors = parse('\n'.join(self.content), language, stem)
-            self.signs.insert(0, 'object', self.object)
-            self.compounds.insert(0, 'object', self.object)
-            self.words.insert(0, 'object', self.object)
-            self.errors.insert(0, 'object', self.object)
             self.errors = self.errors.merge(pd.DataFrame({'line': list(range(len(self.content))), 'content': self.content}), on='line')
 
 
-    state = State('')
-    states = []
+    state = State()
 
     for line in lines:
         if not line:
             continue
-        if m := OBJECT.fullmatch(line):
-            if len(state.content):
-                states.append(state)
-            state = State(m.group('object'))
-        elif m := SURFACE.fullmatch(line):
+        m = OBJECT.fullmatch(line)
+        if m:
+            state.addObject(m.group('object'), m.group('data'), m.group('comment'))
+            continue
+        m = SURFACE.fullmatch(line)
+        if m:
             state.addSurface(m.group('surface'), m.group('data'), m.group('comment'))
-        elif m := BLOCK.fullmatch(line):
+            continue
+        m = BLOCK.fullmatch(line)
+        if m:
             state.addBlock(m.group('block'), m.group('data'), m.group('comment'))
-        else:
-            try:
-                line, rest = line.split('\t', 1)
-            except:
-                print(line)
-                continue
-            content, *comment = re.split('\s+#\s*', rest, 1)
-            comment = comment[0] if comment else None
-            state.addLine(line, comment if comment else None, content)
-
-    if len(state.content):
-        states.append(state)
+            continue
+        
+        try:
+            line, rest = line.split('\t', 1)
+        except:
+            print(line)
+            continue
+        content, *comment = re.split('\s+#\s*', rest, 1)
+        comment = comment[0] if comment else None
+        state.addLine(line, comment if comment else None, content)
     
-    if not states:
+    if not state.objects:
         return None
 
-    for state in states:
-        state.parse(language, stem)
+    state.parse(language, stem)
 
-    objects = pd.DataFrame({'object': [state.object for state in states]})
-    surfaces = pd.DataFrame([x for state in states for x in state.surfaces], columns=['object', 'surface', 'data', 'comment'])
-    blocks = pd.DataFrame([x for state in states for x in state.blocks], columns=['object', 'surfaceNo', 'block', 'data', 'comment'])
-    lines = pd.DataFrame([x for state in states for x in state.lines], columns=['object', 'blockNo', 'line', 'comment'])
+    objects = pd.DataFrame(state.objects, columns = ['object', 'data', 'comment'])
+    surfaces = pd.DataFrame(state.surfaces, columns=['object_no', 'surface', 'data', 'comment'])
+    blocks = pd.DataFrame(state.blocks, columns=['surface_no', 'block', 'data', 'comment'])
+    lines = pd.DataFrame(state.lines, columns=['block_no', 'line', 'comment'])
 
-    signs = pd.concat([state.signs for state in states])
-    compounds = pd.concat([state.compounds for state in states])
-    words = pd.concat([state.words for state in states])
-    errors = pd.concat([state.errors for state in states])
-
-    return objects, surfaces, blocks, lines, signs, compounds, words, errors
+    return objects, surfaces, blocks, lines, state.signs, state.compounds, state.words, state.errors
 
 
 def parseText(text, language, stem):
@@ -190,28 +186,26 @@ def parseFile(path, target, language, stem, corpus):
 
     def write(files, tables, identifier, corpus):
         if tables is not None:
-            transliterations = tables[0]
-            transliterations.insert(0, 'transliterationIdentifier', corpus+identifier)
-            transliterations.insert(0, 'identifier', identifier)
-            transliterations.insert(3, 'description', corpus)
-            transliterations.to_csv(files[0], index=False, header=False, sep=',', na_rep=r'\N')
-            for of, table in zip(files[1:], tables[1:]):
-                table.insert(1, 'index', table.index)
+            for of, table in zip(files, tables):
+                table.insert(0, 'index', table.index)
                 table.insert(0, 'transliterationIdentifier', corpus+identifier)
                 table.to_csv(of, index=False, header=False, sep=',', na_rep=r'\N')
 
-    tables = ['transliterations', 'surfaces', 'blocks', 'lines', 'signs', 'compounds', 'words', 'errors']
+    tables = ['objects', 'surfaces', 'blocks', 'lines', 'signs', 'compounds', 'words', 'errors']
     filenames = target if isinstance(target, list) else [path.join(target, x+'csv') for x in tables]
+    transliterations = []
     identifier = None
     lines = []
     with ExitStack() as stack:
         f = stack.enter_context(open(path))
-        ofiles = [stack.enter_context(open(x, 'w')) for x in filenames]
+        ofiles = [stack.enter_context(open(x, 'w')) for x in filenames[1:]]
         for line in f:
             line = line.strip(' \n\r\f\v')
-            if m := re.match(r'^@text\s+(.+)', line):
+            m = re.match(r'^@text\s+(.+)', line)
+            if m:
                 if identifier is not None:
                     print(identifier)
+                    transliterations.append([identifier, corpus+identifier, corpus])
                     write(ofiles, parseLines(lines, language, stem), identifier, corpus)
                 identifier = m.group(1)
                 lines = []
@@ -219,4 +213,7 @@ def parseFile(path, target, language, stem, corpus):
                 if identifier is None:
                     print('Blah')
                 lines.append(line)
+        print(identifier)
+        transliterations.append([identifier, corpus+identifier, corpus])
         write(ofiles, parseLines(lines, language, stem), identifier, corpus)
+    pd.DataFrame(transliterations).to_csv(filenames[0], index=False, header=False, sep=',', na_rep=r'\N')    

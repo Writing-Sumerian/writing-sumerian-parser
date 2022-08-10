@@ -7,7 +7,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
 
 
 setuptools.setup(name='cuneiformparser',
-                version='0.2.0',
+                version='0.3.1',
                 description='Parse cuneiform transliterations',
                 long_description=long_description,
                 long_description_content_type='text/markdown',

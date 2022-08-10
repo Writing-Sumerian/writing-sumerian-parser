@@ -1,13 +1,12 @@
 import re
 
 try:
-    from .grammar import CuneiformListener
-    from .grammar import CuneiformLexer
-    from .grammar import CuneiformParser
+    from grammar.CuneiformParser import CuneiformParser
+    from grammar.CuneiformListener import CuneiformListener
 except:
-    from grammar import CuneiformListener
-    from grammar import CuneiformLexer
-    from grammar import CuneiformParser
+    from .grammar.CuneiformParser import CuneiformParser
+    from .grammar.CuneiformListener import CuneiformListener
+
 
 class Listener(CuneiformListener):
 

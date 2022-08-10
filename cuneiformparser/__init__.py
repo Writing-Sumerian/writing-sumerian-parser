@@ -1,4 +1,2 @@
-from .parser import parse
-from .parser import parseText
-from .parser import parseFile
+from .parser import parse, parseText, parseFile
 from .preprocess import preprocess
