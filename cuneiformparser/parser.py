@@ -18,6 +18,25 @@ try:
 except:
     from listener import Listener
 
+SIGNS_COLS = [
+    'line_no', 
+    'word_no', 
+    'value', 
+    'sign_spec', 
+    'type',  
+    'indicator_type',
+    'phonographic',
+    'condition',
+    'stem',
+    'crits', 
+    'comment',
+    'newline',
+    'inverted',
+    'ligature',
+    'start_col',
+    'stop_col'
+]
+
 class ErrorListener(antlr4.error.ErrorListener.ErrorListener):
 
     def __init__(self):
@@ -58,43 +77,33 @@ def parse(text, language, stem):
     walker = antlr4.ParseTreeWalker()
     walker.walk(listener, tree)
 
-    signs =     pd.DataFrame(listener.signs, 
-                             columns=['line_no', 
-                                      'word_no', 
-                                      'value', 
-                                      'sign_spec', 
-                                      'type',  
-                                      'indicator', 
-                                      'alignment', 
-                                      'phonographic',
-                                      'condition',
-                                      'stem',
-                                      'crits', 
-                                      'comment',
-                                      'newline',
-                                      'inverted',
-                                      'ligature'])
+    signs =     pd.DataFrame(listener.signs,columns=SIGNS_COLS)
     compounds = pd.DataFrame(listener.compounds,
                              columns=['pn_type', 
                                       'language',
-                                      'section',
+                                      'section_no',
                                       'comment'])
+    compounds['section_no'] = compounds['section_no'].astype('Int64', copy=False)
+    compounds['section_no'].replace(-1, pd.NA, inplace=True)
     words =     pd.DataFrame(listener.words,
                              columns=['compound_no', 
                                       'capitalized'])
+    sections =  pd.DataFrame(listener.sections,
+                             columns=['section_name'])
     errors =    pd.DataFrame(errorListener.errors,
-                             columns=['line', 
+                             columns=['line_no', 
                                       'column', 
                                       'symbol', 
                                       'msg'])
-    return signs, compounds, words, errors
+    return signs, compounds, words, sections, errors
     
 
 def parseLines(lines, language, stem):
 
-    OBJECT = re.compile(r'@(?P<object>tablet|envelope|seal|object)(?:\s+(?P<data>[^?!*]*))?(?:\s*(?P<comment>[?!*]+))?')
-    SURFACE = re.compile(r'@(?P<surface>obverse|reverse|top|bottom|left|right|surface|fragment)(?:\s+(?P<data>[^?!*]*))?(?:\s*(?P<comment>[?!*]+))?')
-    BLOCK = re.compile(r'@(?P<block>block|(?P<col>column))(?:\s+(?P<data>(?(col)[1-9][0-9]*\'*|[^?!*]*)))?(?:\s*(?P<comment>[?!*]+))?')
+    OBJECT = re.compile(r'\s*@(?P<object>tablet|envelope|seal|sealing|object)(?:\s+(?P<data>[^?!*]*))?(?:\s*(?P<comment>[?!*]+))?\s*')
+    SURFACE = re.compile(r'\s*@(?P<surface>obverse|reverse|top|bottom|left|right|surface|fragment)(?:\s+(?P<data>[^?!*]*))?(?:\s*(?P<comment>[?!*]+))?\s*')
+    BLOCK = re.compile(r'\s*@(?P<block>block|(?P<col>column|summary))(?:\s+(?P<data>(?(col)[1-9][0-9]*[a-g]?(?:\'+|[′″‴⁗])?(?:-[1-9][0-9]*[a-g]?(?:\'+|[′″‴⁗])?)?|[^?!*]*)))?(?:\s*(?P<comment>[?!*]+))?\s*')
+    COMMENT = re.compile(r'\s*#\s*(?P<comment>.*)')
 
     class State:
         def __init__(self):
@@ -107,12 +116,27 @@ def parseLines(lines, language, stem):
             self.blocks = []
             self.lines = []
             self.content = []
+            self.lineNos = []
+            self.colOffsets = []
+
+            self.errorList = []
+
+            self.lastAdded = None
+
+        def convertToPrimes(text):
+            if text is not None:
+                text = text.replace("''''", "⁗")
+                text = text.replace("'''", "‴")
+                text = text.replace("''", "″")
+                text = text.replace("'", "′")
+            return text
 
         def addObject(self, object, data, comment):
             self.objects.append([object, data, comment])
             self.validObject = True
             self.validSurface = False
             self.validBlock = False
+            self.lastAdded = self.objects[-1]
 
         def addSurface(self, surface, data, comment):
             if not self.validObject:
@@ -120,28 +144,53 @@ def parseLines(lines, language, stem):
             self.surfaces.append([len(self.objects)-1, surface, data, comment])
             self.validSurface = True
             self.validBlock = False
+            self.lastAdded = self.surfaces[-1]
 
         def addBlock(self, block, data, comment):
             if not self.validSurface:
                 self.addSurface('surface', None, None)
             self.validBlock = True
-            self.blocks.append([len(self.surfaces)-1, block or None, data, comment])
+            self.blocks.append([len(self.surfaces)-1, block or None, State.convertToPrimes(data), comment])
+            self.lastAdded = self.blocks[-1]
 
-        def addLine(self, line, comment, content):
+        def addLine(self, line, comment, content, lineNo):
             if not self.validBlock:
                 self.addBlock('block', None, None)
-            self.lines.append([len(self.blocks)-1, line, comment])
-            self.content.append(content)
+            self.lines.append([len(self.blocks)-1, State.convertToPrimes(line), comment])
+            self.content.append(content.strip())
+            self.lineNos.append(lineNo)
+            m = re.match(r'^\s*', content)
+            self.colOffsets.append(len(line)+1+m.end())
+            self.lastAdded = self.lines[-1]
+
+        def addError(self, line, column, symbol, msg):
+            self.errorList.append([line, column, symbol, msg])
 
         def parse(self, language, stem):
-            self.signs, self.compounds, self.words, self.errors = parse('\n'.join(self.content), language, stem)
-            self.errors = self.errors.merge(pd.DataFrame({'line': list(range(len(self.content))), 'content': self.content}), on='line')
+            lineInfo = pd.DataFrame({
+                'line_no': list(range(len(self.lineNos))), 
+                'line_no_code': self.lineNos, 
+                'colOffset': self.colOffsets})
+
+            signs, self.compounds, self.words, self.sections, errors = parse('\n'.join(self.content), language, stem)
+            signs = signs.merge(lineInfo, on='line_no')
+            signs['start_col_code'] = signs['start_col'] + signs['colOffset']
+            signs['stop_col_code'] = signs['stop_col'] + signs['colOffset']
+            self.signs = signs[SIGNS_COLS+['line_no_code', 'start_col_code', 'stop_col_code']]
+            errors = errors.merge(lineInfo, on='line_no')
+            errors['line_no'] = errors['line_no_code']
+            errors['column'] = errors['column'] + errors['colOffset']
+            self.errors = pd.concat([
+                    pd.DataFrame(self.errorList, columns=['line_no', 'column', 'symbol', 'msg']), 
+                    errors[['line_no', 'column', 'symbol', 'msg']]
+                ], 
+                ignore_index=True).sort_values(['line_no', 'column'])
 
 
     state = State()
 
-    for line in lines:
-        if not line:
+    for lineNo, line in enumerate(lines):
+        if not line.strip(' \n\r\f\v'):
             continue
         m = OBJECT.fullmatch(line)
         if m:
@@ -155,15 +204,20 @@ def parseLines(lines, language, stem):
         if m:
             state.addBlock(m.group('block'), m.group('data'), m.group('comment'))
             continue
+
+        m = COMMENT.fullmatch(line)
+        if m:
+            state.lastAdded[-1] = state.lastAdded[-1] + ' ' + m.group('comment') if state.lastAdded[-1] else m.group('comment')
+            continue
         
         try:
             line, rest = line.split('\t', 1)
         except:
-            print(line)
+            state.addError(lineNo, 0, None, f'Invalid line: {lineNo}')
             continue
         content, *comment = re.split('\s+#\s*', rest, 1)
-        comment = comment[0] if comment else None
-        state.addLine(line, comment if comment else None, content)
+        comment = comment[0].strip() if comment else None
+        state.addLine(line, comment if comment else None, content, lineNo)
     
     if not state.objects:
         return None
@@ -175,11 +229,15 @@ def parseLines(lines, language, stem):
     blocks = pd.DataFrame(state.blocks, columns=['surface_no', 'block', 'data', 'comment'])
     lines = pd.DataFrame(state.lines, columns=['block_no', 'line', 'comment'])
 
-    return objects, surfaces, blocks, lines, state.signs, state.compounds, state.words, state.errors
+    sections = state.sections
+    sections['composition'] = sections['section_name']
+    sections['witness_type'] = 'variant'
+
+    return objects, surfaces, blocks, lines, state.signs, state.compounds, state.words, sections, state.errors
 
 
 def parseText(text, language, stem):
-    return parseLines([line.strip(' \n\r\f\v') for line in text.split('\n')], language, stem)
+    return parseLines(text.split('\n'), language, stem)
 
 
 def parseFile(path, target, language, stem, corpus):
@@ -191,7 +249,7 @@ def parseFile(path, target, language, stem, corpus):
                 table.insert(0, 'transliterationIdentifier', corpus+identifier)
                 table.to_csv(of, index=False, header=False, sep=',', na_rep=r'\N')
 
-    tables = ['objects', 'surfaces', 'blocks', 'lines', 'signs', 'compounds', 'words', 'errors']
+    tables = ['objects', 'surfaces', 'blocks', 'lines', 'signs', 'compounds', 'words', 'sections', 'errors']
     filenames = target if isinstance(target, list) else [path.join(target, x+'csv') for x in tables]
     transliterations = []
     identifier = None
@@ -200,8 +258,7 @@ def parseFile(path, target, language, stem, corpus):
         f = stack.enter_context(open(path))
         ofiles = [stack.enter_context(open(x, 'w')) for x in filenames[1:]]
         for line in f:
-            line = line.strip(' \n\r\f\v')
-            m = re.match(r'^@text\s+(.+)', line)
+            m = re.match(r'^\s*@text\s+(.+)', line)
             if m:
                 if identifier is not None:
                     print(identifier)
@@ -209,9 +266,9 @@ def parseFile(path, target, language, stem, corpus):
                     write(ofiles, parseLines(lines, language, stem), identifier, corpus)
                 identifier = m.group(1)
                 lines = []
-            elif line:
-                if identifier is None:
-                    print('Blah')
+            else:
+                if line.strip() and identifier is None:
+                    print(f'Warning: Line outside of text: "{line}".')
                 lines.append(line)
         print(identifier)
         transliterations.append([identifier, corpus+identifier, corpus])
