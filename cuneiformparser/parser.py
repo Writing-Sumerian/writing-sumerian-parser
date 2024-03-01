@@ -89,7 +89,7 @@ def parse(text, language, stem):
                              columns=['compound_no', 
                                       'capitalized'])
     sections =  pd.DataFrame(listener.sections,
-                             columns=['composition'])
+                             columns=['section_name'])
     errors =    pd.DataFrame(errorListener.errors,
                              columns=['line_no', 
                                       'column', 
@@ -209,6 +209,7 @@ def parseLines(lines, language, stem):
     blocks = pd.DataFrame(state.blocks, columns=['surface_no', 'block', 'data', 'comment'])
     lines = pd.DataFrame(state.lines, columns=['block_no', 'line', 'comment'])
     sections = state.sections
+    sections['composition'] = sections['section_name']
 
     return surfaces, blocks, lines, state.signs, state.compounds, state.words, sections, state.errors
 
