@@ -13,11 +13,10 @@ numberSigns = re.compile(r'(ŠAR2|IKU|AŠ|DIŠ|BUR3|GEŠ2|U|BARIG|EŠE3|BAN2|ŠA
 
 class Listener(CuneiformListener):
 
-    def __init__(self, errorListener, defaultLanguage, stem):
+    def __init__(self, errorListener):
         self.errorListener = errorListener
 
-        self.default_language = defaultLanguage
-        self.default_stem = True if stem else None
+        self.default_stem = None
 
         self.signs = []
         self.words = []
@@ -46,7 +45,7 @@ class Listener(CuneiformListener):
         self.capitalized = False
 
         self.pn_type = None
-        self.language = self.default_language
+        self.language = None
         self.comments = []
         self.compoundComments = []
         self.section = False
@@ -63,7 +62,7 @@ class Listener(CuneiformListener):
                            False if self.logogramm else self.phonographic, 
                            'lost' if self.value == '…' else 'damaged' if self.damaged else self.condition,
                            self.stem, 
-                           self.crits.replace('!', '') if self.signSpec and self.sign_type in ['sign', 'value'] and not self.value.endswith('x') else self.crits,
+                           self.crits,
                            '; '.join(self.comments) if self.comments else None, 
                            self.newline, 
                            self.inverted,
@@ -95,21 +94,35 @@ class Listener(CuneiformListener):
         val = None
         if '=' in var:
             var, val = var.split('=')
+        elif var.endswith('+'):
+            var = var[:-1]
+            val = True
+        elif var.endswith('-'):
+            var = var[:-1]
+            val = False
+
         if var in ['a', 'akk']:
             self.language = 'akkadian'
         elif var in ['s', 'sux', 'eg']:
             self.language = 'sumerian'
         elif var in ['h', 'hit']:
             self.language = 'hittite'
+        elif var in ['u', 'ukn']:
+            self.language = None
         elif var in ['person', 'place', 'god', 'water', 'field', 'temple', 'month', 'object', 'ethnicity']:
             self.pn_type = var
             self.capitalized = True
+        elif var == 'st':
+            self.default_stem = True if val else None
+            self.stem = self.default_stem
         elif var == 'sec':
             if val:
                 self.sections.append(val)
                 self.section = True
             else:
                 self.section = False
+        else:
+            raise Exception(var)
 
     def exitLog(self, ctx:CuneiformParser.LogContext):
         self.logogramm = not self.logogramm
@@ -489,7 +502,6 @@ class Listener(CuneiformListener):
         if self.logogramm:
             self.errorListener.syntaxError(None, None, ctx.start.line, ctx.start.column, 'Unpaired underscores', None)
             self.logogramm = False
-        #self.language = self.default_language
 
     def exitNl(self, ctx:CuneiformParser.NlContext):
         self.nl(ctx)

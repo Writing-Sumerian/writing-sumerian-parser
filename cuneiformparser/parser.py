@@ -55,7 +55,7 @@ class ErrorListener(antlr4.error.ErrorListener.ErrorListener):
     #    print('Context:', dfa, prediction)
 
 
-def parse(text, language, stem):
+def parse(text):
     input = antlr4.InputStream(text)
     lexer = CuneiformLexer(input)
     stream = antlr4.CommonTokenStream(lexer)
@@ -73,7 +73,7 @@ def parse(text, language, stem):
     parser.addErrorListener(errorListener)
 
     tree = parser.text()
-    listener = Listener(errorListener, language, stem)
+    listener = Listener(errorListener)
     walker = antlr4.ParseTreeWalker()
     walker.walk(listener, tree)
 
@@ -98,7 +98,7 @@ def parse(text, language, stem):
     return signs, compounds, words, sections, errors
     
 
-def parseLines(lines, language, stem):
+def parseLines(lines):
 
     SURFACE = re.compile(r'\s*@(?P<surface>obverse|reverse|top|bottom|left|right|surface|fragment)(?:\s+(?P<data>[^?!*]*))?(?:\s*(?P<comment>[?!*]+))?\s*')
     BLOCK = re.compile(r'\s*@(?P<block>block|(?P<col>column|summary))(?:\s+(?P<data>(?(col)[1-9][0-9]*[a-g]?(?:\'+|[′″‴⁗])?(?:-[1-9][0-9]*[a-g]?(?:\'+|[′″‴⁗])?)?|[^?!*]*)))?(?:\s*(?P<comment>[?!*]+))?\s*')
@@ -154,13 +154,13 @@ def parseLines(lines, language, stem):
         def addError(self, line, column, symbol, msg):
             self.errorList.append([line, column, symbol, msg])
 
-        def parse(self, language, stem):
+        def parse(self):
             lineInfo = pd.DataFrame({
                 'line_no': list(range(len(self.lineNos))), 
                 'line_no_code': self.lineNos, 
                 'colOffset': self.colOffsets})
 
-            signs, self.compounds, self.words, self.sections, errors = parse('\n'.join(self.content), language, stem)
+            signs, self.compounds, self.words, self.sections, errors = parse('\n'.join(self.content))
             signs = signs.merge(lineInfo, on='line_no')
             signs['start_col_code'] = signs['start_col'] + signs['colOffset']
             signs['stop_col_code'] = signs['stop_col'] + signs['colOffset']
@@ -203,7 +203,7 @@ def parseLines(lines, language, stem):
         comment = comment[0].strip() if comment else None
         state.addLine(line, comment if comment else None, content, lineNo)
     
-    state.parse(language, stem)
+    state.parse()
 
     surfaces = pd.DataFrame(state.surfaces, columns=['surface', 'data', 'comment'])
     blocks = pd.DataFrame(state.blocks, columns=['surface_no', 'block', 'data', 'comment'])
@@ -214,11 +214,11 @@ def parseLines(lines, language, stem):
     return surfaces, blocks, lines, state.signs, state.compounds, state.words, sections, state.errors
 
 
-def parseText(text, language, stem):
-    return parseLines(text.split('\n'), language, stem)
+def parseText(text):
+    return parseLines(text.split('\n'))
 
 
-def parseFile(path, target, language, stem, corpus):
+def parseFile(path, target, corpus):
 
     def write(files, tables, identifier, corpus):
         if tables is not None:
@@ -241,7 +241,7 @@ def parseFile(path, target, language, stem, corpus):
                 if identifier is not None:
                     print(identifier)
                     transliterations.append([identifier, corpus+identifier, corpus])
-                    write(ofiles, parseLines(lines, language, stem), identifier, corpus)
+                    write(ofiles, parseLines(lines), identifier, corpus)
                 identifier = m.group(1)
                 lines = []
             else:
@@ -250,5 +250,5 @@ def parseFile(path, target, language, stem, corpus):
                 lines.append(line)
         print(identifier)
         transliterations.append([identifier, corpus+identifier, corpus])
-        write(ofiles, parseLines(lines, language, stem), identifier, corpus)
+        write(ofiles, parseLines(lines), identifier, corpus)
     pd.DataFrame(transliterations).to_csv(filenames[0], index=False, header=False, sep=',', na_rep=r'\N')    

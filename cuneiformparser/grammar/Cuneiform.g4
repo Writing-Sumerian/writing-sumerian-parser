@@ -24,7 +24,7 @@ fragment ABBR  : 'B' ']'? '['? 'A' ']'? '['? 'U'
                | 'U' ']'? '['? 'K' ']'? '['? 'N';
 
 DESC           : '"' ~["\n]* '"';
-SHIFT          : '%' [a-z] ~[ \n]*;
+SHIFT          : '%' [a-z] ~[ \n%]*;
 NUMBER         : '0' | ( PNUM ( '/' PNUM | FRAC )? | FRAC ) ( '(' [cdf] ')' )?;
 
 VOWELSIGN      : UVOWEL INDEX?;
@@ -40,7 +40,7 @@ N              : [Nn] ( '(' [cdf] ')' )?;
 D              : 'd';
 DUAL           : 'II';
 MOD            : '@' ( [tgšnkzicdfvabx] | '270' | '180' | '90' | '45' | '4' );
-CRIT           : [!~*#];
+CRIT           : [~*#];
 VARIANT        : '~' ( [a-z] PNUM? )?;
 OCONDITION     : [[⸢‹«];
 CCONDITION     : [\]⸣›»];
@@ -59,12 +59,13 @@ SPACE          : ' '+;
 DOUBLEDASH     : '--';
 
 QMARK          : '?';
+EMARK          : '!';
 
 OTHER          : .;
 
 text           : ( line ( nl line )* )? EOF;
 line           : space? oConLog? ( compound | hdivCompound | shift ) ( spaceSep ( compound | hdivCompound | shift ) )* cConLog? space?
-               | ( space? shift )? vdivCompound;
+               | ( space? shift )* vdivCompound;
 
 vdivCompound   : space? openCondition? vdividerAtom ( closeCondition? space? compoundComment)? closeCondition? space?;
 hdivCompound   : hdividerAtom ( closeCondition? space? compoundComment )?;
@@ -127,12 +128,12 @@ breakAtom      : x
 
 // Characters
 
-value          : ( valueT | descT ) variant? mod* ( crit | signSpec | comment )*;
-cvalue         : cvalueT variant? mod* ( crit | signSpec | comment )*;
-detValue       : ( dT | dualT ) ( crit | signSpec | comment )*;
-signChar       : sign ( crit | signSpec | comment )*;
+value          : ( valueT | descT ) variant? mod* ( EMARK? signSpec )? ( crit | comment )*;
+cvalue         : cvalueT variant? mod* ( EMARK? signSpec )? ( crit | comment )*;
+detValue       : ( dT | dualT ) ( EMARK? signSpec )? ( crit | comment )*;
+signChar       : sign ( EMARK? signSpec )? ( crit | comment )*;
 simpleNumber   : ( ( plusCrit? | unaryMinusOp? ) numberT | unaryMinusOp? numberT plusCrit ) ( crit | signSpec | comment )*;
-x              : xT ( crit | signSpec | comment )*;
+x              : xT signSpec? ( crit | comment )*;
 ellipsis       : ellipsisT ( crit | comment )*;
 vdivider       : vdividerT ( crit | comment )*;
 hdivider       : hdividerT ( crit | comment )*;
@@ -240,7 +241,7 @@ space          : SPACE;
 colon          : ':';
 
 mod            : MOD;
-crit           : CRIT | QMARK;
+crit           : CRIT | QMARK | EMARK;
 variant        : VARIANT;
 plusCrit       : '+';
 
