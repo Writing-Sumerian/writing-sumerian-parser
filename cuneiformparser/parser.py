@@ -199,7 +199,7 @@ def parseLines(lines):
         except:
             state.addError(lineNo, 0, None, f'Invalid line: {lineNo}')
             continue
-        content, *comment = re.split('\s+#\s*', rest, 1)
+        content, *comment = re.split(r'\s+#\s*', rest, 1)
         comment = comment[0].strip() if comment else None
         state.addLine(line, comment if comment else None, content, lineNo)
     
