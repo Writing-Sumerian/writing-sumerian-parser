@@ -57,7 +57,7 @@ class Listener(CuneiformListener):
                            len(self.words),
                            self.value if self.value else None,
                            self.signSpec if self.signSpec else None, 
-                           'damage' if self.sign_type == 'sign' and self.value in '…X' else self.sign_type, 
+                           'damage' if self.sign_type == 'sign' and re.search('[…X]', self.value) else self.sign_type, 
                            self.alignment if self.indicator else 'none',
                            False if self.logogramm else self.phonographic, 
                            'lost' if self.value == '…' else 'damaged' if self.damaged else self.condition,
