@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cuneiformparser"
+version = "0.3.2"
+description = "Parse cuneiform transliterations"
+readme = "README.md"
+authors = [{name = "Marc Endesfelder", email = "marc@endesfelder.de"}]
+license = {text = "MIT"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research"
+]
+dependencies=['antlr4-python3-runtime', 'pandas']
