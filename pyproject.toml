@@ -3,9 +3,9 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cuneiformparser"
+name = "writingsumerianparser"
 version = "0.3.2"
-description = "Parse cuneiform transliterations"
+description = "Parse cuneiform transliterations to Writing Sumerian compatible tables"
 readme = "README.md"
 authors = [{name = "Marc Endesfelder", email = "marc@endesfelder.de"}]
 license = {text = "MIT"}
